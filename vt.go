@@ -14,6 +14,11 @@ import (
 	"sync"
 )
 
+// REVIEW(Edu): Suggestion: the types defined here are in the arbo package, but
+// are specific to the virtual tree.  Have you considered using names that make
+// a reference to the virtual tree?  for example vtNode instead of node, or
+// vtParams instead of params.
+
 type node struct {
 	l    *node
 	r    *node
@@ -31,7 +36,7 @@ type params struct {
 }
 
 type kv struct {
-	pos     int // original position in the inputted array
+	pos     int // original position in the input array
 	keyPath []byte
 	k       []byte
 	v       []byte
@@ -45,6 +50,7 @@ func (p *params) keysValuesToKvs(ks, vs [][]byte) ([]kv, error) {
 	kvs := make([]kv, len(ks))
 	for i := 0; i < len(ks); i++ {
 		keyPath := make([]byte, p.hashFunction.Len())
+		// REVIEW(Edu): What's the difference between kv.keyPath and kv.k?
 		copy(keyPath[:], ks[i])
 		kvs[i].pos = i
 		kvs[i].keyPath = keyPath
@@ -105,6 +111,9 @@ func (t *vt) addBatch(ks, vs [][]byte) ([]int, error) {
 	if err != nil {
 		return nil, err
 	}
+	// REVIEW(Edu): I haven't found a test that enters into this case.  I
+	// also haven't managed to create a new test that enters here.  I think
+	// you should add a test that goes through this path.
 	if len(nodesAtL) != nCPU && t.root != nil {
 		/*
 			Already populated Tree but Unbalanced
@@ -368,6 +377,7 @@ func (t *vt) computeHashes() ([][2][]byte, error) {
 
 func newLeafNode(p *params, k, v []byte) *node {
 	keyPath := make([]byte, p.hashFunction.Len())
+	// REVIEW(Edu) panic if len(k) > len(keyPath)
 	copy(keyPath[:], k)
 	path := getPath(p.maxLevels, keyPath)
 	n := &node{
@@ -410,6 +420,7 @@ func (n *node) add(p *params, currLvl int, leaf *node) error {
 	}
 
 	t := n.typ()
+	// REVIEW(Edu): Simplified return points. See:
 	switch t {
 	case vtMid:
 		if leaf.path[currLvl] {
@@ -419,18 +430,14 @@ func (n *node) add(p *params, currLvl int, leaf *node) error {
 				n.r = leaf
 				return nil
 			}
-			if err := n.r.add(p, currLvl+1, leaf); err != nil {
-				return err
-			}
+			return n.r.add(p, currLvl+1, leaf)
 		} else {
 			if n.l == nil {
 				// empty sub-node, add the leaf here
 				n.l = leaf
 				return nil
 			}
-			if err := n.l.add(p, currLvl+1, leaf); err != nil {
-				return err
-			}
+			return n.l.add(p, currLvl+1, leaf)
 		}
 	case vtLeaf:
 		if bytes.Equal(n.k, leaf.k) {
@@ -449,16 +456,12 @@ func (n *node) add(p *params, currLvl int, leaf *node) error {
 		n.v = nil
 		n.h = nil
 		n.path = nil
-		if err := n.downUntilDivergence(p, currLvl, oldLeaf, leaf); err != nil {
-			return err
-		}
+		return n.downUntilDivergence(p, currLvl, oldLeaf, leaf)
 	case vtEmpty:
 		return fmt.Errorf("virtual tree node.add() with empty node %v", n)
 	default:
 		return fmt.Errorf("virtual tree node.add() with unknown node type %v", n)
 	}
-
-	return nil
 }
 
 func (n *node) downUntilDivergence(p *params, currLvl int, oldLeaf, newLeaf *node) error {
@@ -477,22 +480,17 @@ func (n *node) downUntilDivergence(p *params, currLvl int, oldLeaf, newLeaf *nod
 		}
 		return nil
 	}
+	// REVIEW(Edu): Simplified return points. See:
 	// no divergence yet, continue going down
 	if newLeaf.path[currLvl] {
 		// right
 		n.r = &node{}
-		if err := n.r.downUntilDivergence(p, currLvl+1, oldLeaf, newLeaf); err != nil {
-			return err
-		}
+		return n.r.downUntilDivergence(p, currLvl+1, oldLeaf, newLeaf)
 	} else {
 		// left
 		n.l = &node{}
-		if err := n.l.downUntilDivergence(p, currLvl+1, oldLeaf, newLeaf); err != nil {
-			return err
-		}
+		return n.l.downUntilDivergence(p, currLvl+1, oldLeaf, newLeaf)
 	}
-
-	return nil
 }
 
 func splitInBuckets(kvs []kv, nBuckets int) [][]kv {
@@ -511,22 +509,14 @@ func splitInBuckets(kvs []kv, nBuckets int) [][]kv {
 // TODO rename in a more 'real' name (calculate bucket from/for key)
 func keyToBucket(k []byte, nBuckets int) int {
 	nLevels := int(math.Log2(float64(nBuckets)))
-	b := make([]int, nBuckets)
-	for i := 0; i < nBuckets; i++ {
-		b[i] = i
-	}
-	r := b
-	mid := len(r) / 2 //nolint:gomnd
+	// REVIEW(Edu): Simplified. See: (with test TestKeyToBucket)
+	bucket := 0
 	for i := 0; i < nLevels; i++ {
 		if int(k[i/8]&(1<<(i%8))) != 0 {
-			r = r[mid:]
-			mid = len(r) / 2 //nolint:gomnd
-		} else {
-			r = r[:mid]
-			mid = len(r) / 2 //nolint:gomnd
+			bucket += 1 << (nLevels - 1 - i)
 		}
 	}
-	return r[0]
+	return bucket
 }
 
 // flp2 computes the floor power of 2, the highest power of 2 under the given

@@ -303,6 +303,104 @@ func TestGet(t *testing.T) {
 	c.Check(gettedValue, qt.DeepEquals, BigIntToBytes(bLen, big.NewInt(int64(7*2))))
 }
 
+func TestPanic1(t *testing.T) {
+	c := qt.New(t)
+	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	tree, err := NewTree(database, 257, HashFunctionPoseidon)
+	c.Assert(err, qt.IsNil)
+	defer tree.db.Close() //nolint:errcheck
+
+	c.Assert(tree.Add([]byte{0, 1, 2}, []byte{3, 4, 5}), qt.IsNil)
+}
+
+// REVIEW(Edu) This test has an edge case with keys of 32 bytes.  Why does it fail with "max level reached"?
+func TestEdge1(t *testing.T) {
+	c := qt.New(t)
+	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	tree, err := NewTree(database, 256, HashFunctionSha256)
+	c.Assert(err, qt.IsNil)
+	defer tree.db.Close() //nolint:errcheck
+
+	k1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+	k2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128}
+	c.Assert(len(k1), qt.Equals, 32)
+	c.Assert(len(k2), qt.Equals, 32)
+	c.Assert(tree.Add(k1, []byte{1}), qt.IsNil)
+	c.Assert(tree.Add(k2, []byte{2}), qt.IsNil)
+
+	for _, key := range [][]byte{k1, k2} {
+		leafK, leafV, s, exist, err := tree.GenProof(key)
+		c.Assert(err, qt.IsNil)
+		c.Assert(exist, qt.Equals, true)
+
+		root, err := tree.Root()
+		c.Assert(err, qt.IsNil)
+		ok, err := CheckProof(HashFunctionSha256, leafK, leafV, root, s)
+		c.Assert(err, qt.IsNil)
+		c.Assert(ok, qt.Equals, true)
+	}
+}
+
+// func TestEdge2(t *testing.T) {
+// 	c := qt.New(t)
+// 	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+// 	c.Assert(err, qt.IsNil)
+// 	tree, err := NewTree(database, 256, HashFunctionSha256)
+// 	c.Assert(err, qt.IsNil)
+// 	defer tree.db.Close() //nolint:errcheck
+//
+// 	k1 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+// 	k2 := []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0}
+// 	c.Assert(len(k1), qt.Equals, 32)
+// 	c.Assert(len(k2), qt.Equals, 32)
+// 	c.Assert(tree.Add(k1, []byte{1}), qt.IsNil)
+// 	c.Assert(tree.Add(k2, []byte{2}), qt.IsNil)
+//
+// 	for _, key := range [][]byte{k1, k2} {
+// 		leafK, leafV, s, exist, err := tree.GenProof(key)
+// 		c.Assert(err, qt.IsNil)
+// 		c.Assert(exist, qt.Equals, true)
+//
+// 		root, err := tree.Root()
+// 		c.Assert(err, qt.IsNil)
+// 		ok, err := CheckProof(HashFunctionSha256, leafK, leafV, root, s)
+// 		c.Assert(err, qt.IsNil)
+// 		c.Assert(ok, qt.Equals, true)
+// 	}
+// }
+
+func TestEdge3(t *testing.T) {
+	c := qt.New(t)
+	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	tree, err := NewTree(database, 256, HashFunctionSha256)
+	c.Assert(err, qt.IsNil)
+	defer tree.db.Close() //nolint:errcheck
+
+	k1 := []byte{1}
+	k2 := []byte{2}
+	k3 := []byte{3}
+	keys := [][]byte{k1, k2, k3}
+
+	for _, key := range keys {
+		c.Assert(tree.Add(key, []byte{1}), qt.IsNil)
+	}
+
+	values := make([][]byte, 0)
+	// Iterate over the nodes and stop after we found the first leaf.
+	err = tree.IterateWithStop(nil, func(lvl int, key []byte, value []byte) bool {
+		if value[0] != PrefixValueLeaf {
+			return false
+		}
+		values = append(values, value)
+		return true
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(len(values), qt.Equals, 1)
+}
+
 func TestGenProofAndVerify(t *testing.T) {
 	c := qt.New(t)
 	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})

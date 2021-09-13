@@ -9,6 +9,31 @@ import (
 	"go.vocdoni.io/dvote/db/badgerdb"
 )
 
+func TestKeyToBucket(t *testing.T) {
+	c := qt.New(t)
+	type Values struct {
+		k        []byte
+		nBuckets int
+		bucket   int
+	}
+
+	values := []Values{
+		{[]byte{0, 0}, 8, 0},
+		{[]byte{1, 0}, 8, 4},
+		{[]byte{2, 0}, 8, 2},
+		{[]byte{3, 0}, 8, 6},
+		{[]byte{0, 0}, 16, 0},
+		{[]byte{1, 0}, 16, 8},
+		{[]byte{2, 0}, 16, 4},
+		{[]byte{3, 0}, 16, 12},
+		{[]byte{4, 0}, 16, 2},
+		{[]byte{5, 0}, 16, 10},
+	}
+	for _, value := range values {
+		c.Assert(keyToBucket(value.k, value.nBuckets), qt.Equals, value.bucket)
+	}
+}
+
 func TestVirtualTreeTestVectors(t *testing.T) {
 	c := qt.New(t)
 

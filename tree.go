@@ -73,6 +73,8 @@ var (
 
 // Tree defines the struct that implements the MerkleTree functionalities
 type Tree struct {
+	// REVIEW(Edu): You're expsing the RWMutex methods externally, I don't
+	// think that's what you want!
 	sync.RWMutex
 
 	db           db.Database
@@ -82,6 +84,8 @@ type Tree struct {
 	hashFunction HashFunction
 	// TODO in the methods that use it, check if emptyHash param is len>0
 	// (check if it has been initialized)
+	// REVIEW(Edu): Why do you need to check that?  Isn't emptyHash always
+	// a valid value initialized in the NewTree method?
 	emptyHash []byte
 
 	dbg *dbgStats
@@ -179,6 +183,21 @@ func (t *Tree) AddBatch(keys, values [][]byte) ([]int, error) {
 // AddBatchWithTx does the same than the AddBatch method, but allowing to pass
 // the db.WriteTx that is used. The db.WriteTx will not be committed inside
 // this method.
+// REVIEW(Edu): Specify what error is returned when some keys have failed.  Is
+// it the error related to the first key?  Also I think it would be interesting
+// to defie what situation can lead to a key failure.  In my opinion, returning
+// the failed keys should only be done when the key / value fails during
+// hashing (because it's too big).  I think that's the only case where it's
+// interesting for the user to check the keys that failed, fix them, and try
+// again.  For all db failures, I don't think it's worth returning the list of
+// failed keys.
+// REVIEW(Edu): Suggestion:  Imagine you have a big tree, and want to add 10
+// key-values.  Right now, this funciton will load the entire tree to disk, add
+// the 10 key-values, compute all the hashes, and do a massive write back to
+// disk.  I think there's an easy way to improve this: calculate the ratio of tree
+// size VS len(keys).  If this ratio is below the threshold, don't call
+// addBatch with the virtual tree, and instead just call t.Add for every
+// key-value.
 func (t *Tree) AddBatchWithTx(wTx db.WriteTx, keys, values [][]byte) ([]int, error) {
 	t.Lock()
 	defer t.Unlock()
@@ -195,11 +214,13 @@ func (t *Tree) AddBatchWithTx(wTx db.WriteTx, keys, values [][]byte) ([]int, err
 	e := []byte{}
 	// equal the number of keys & values
 	if len(keys) > len(values) {
+		// REVIEW(Edu): I think this should be an error, because the user may have commited a mistake
 		// add missing values
 		for i := len(values); i < len(keys); i++ {
 			values = append(values, e)
 		}
 	} else if len(keys) < len(values) {
+		// REVIEW(Edu): I think this should be an error, because the user may have commited a mistake
 		// crop extra values
 		values = values[:len(keys)]
 	}
@@ -302,10 +323,17 @@ func (t *Tree) AddWithTx(wTx db.WriteTx, k, v []byte) error {
 	return nil
 }
 
+// REVIEW(Edu): Is add with fromLvl != 0 used anywhere?
 func (t *Tree) add(wTx db.WriteTx, root []byte, fromLvl int, k, v []byte) ([]byte, error) {
 	keyPath := make([]byte, t.hashFunction.Len())
+	// REVIEW(Edu): Why does keyPad need to be of length hasFunction.Len()?
+	// It doesn't make sense to me.  Using maxLvl makes more sense to me.
+	// Also, it should be an error if the key is longer, instead of
+	// discarding the tail silently!
+	// REVIEW(Edu) error if len(k) > len(keyPath)
 	copy(keyPath[:], k)
 
+	// REVIEW(Edu) What happens if maxLevels > 8 * t.hashFunction.Len()?  See TestPanic1
 	path := getPath(t.maxLevels, keyPath)
 	// go down to the leaf
 	var siblings [][]byte
@@ -336,6 +364,7 @@ func (t *Tree) add(wTx db.WriteTx, root []byte, fromLvl int, k, v []byte) ([]byt
 	return root, nil
 }
 
+// REVIEW(Edu): Document what each argument is to help understand the code.
 // down goes down to the leaf recursively
 func (t *Tree) down(rTx db.ReadTx, newKey, currKey []byte, siblings [][]byte,
 	path []bool, currLvl int, getLeaf bool) (
@@ -376,6 +405,7 @@ func (t *Tree) down(rTx db.ReadTx, newKey, currKey []byte, siblings [][]byte,
 			}
 
 			oldLeafKeyFull := make([]byte, t.hashFunction.Len())
+			// REVIEW(Edu) panic if oldLeafKey.len() > oldLeafKeyFull
 			copy(oldLeafKeyFull[:], oldLeafKey)
 
 			// if currKey is already used, go down until paths diverge
@@ -393,14 +423,14 @@ func (t *Tree) down(rTx db.ReadTx, newKey, currKey []byte, siblings [][]byte,
 					PrefixValueLen+t.hashFunction.Len()*2, len(currValue))
 		}
 		// collect siblings while going down
+		// REVIEW(Edu): Move `lChild, rChild := ReadIntermediateChilds(currValue)` here. Like this:
+		lChild, rChild := ReadIntermediateChilds(currValue)
 		if path[currLvl] {
 			// right
-			lChild, rChild := ReadIntermediateChilds(currValue)
 			siblings = append(siblings, lChild)
 			return t.down(rTx, newKey, rChild, siblings, path, currLvl+1, getLeaf)
 		}
 		// left
-		lChild, rChild := ReadIntermediateChilds(currValue)
 		siblings = append(siblings, rChild)
 		return t.down(rTx, newKey, lChild, siblings, path, currLvl+1, getLeaf)
 	default:
@@ -408,11 +438,11 @@ func (t *Tree) down(rTx db.ReadTx, newKey, currKey []byte, siblings [][]byte,
 	}
 }
 
+// REVIEW(Edu): Document what each argument is to help understand the code.
 // downVirtually is used when in a leaf already exists, and a new leaf which
 // shares the path until the existing leaf is being added
 func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
 	newPath []bool, currLvl int) ([][]byte, error) {
-	var err error
 	if currLvl > t.maxLevels-1 {
 		return nil, ErrMaxVirtualLevel
 	}
@@ -420,18 +450,14 @@ func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
 	if oldPath[currLvl] == newPath[currLvl] {
 		siblings = append(siblings, t.emptyHash)
 
-		siblings, err = t.downVirtually(siblings, oldKey, newKey, oldPath, newPath, currLvl+1)
-		if err != nil {
-			return nil, err
-		}
-		return siblings, nil
+		return t.downVirtually(siblings, oldKey, newKey, oldPath, newPath, currLvl+1)
 	}
 	// reached the divergence
 	siblings = append(siblings, oldKey)
-
 	return siblings, nil
 }
 
+// REVIEW(Edu) is up with toLvl != 0 used anywhere?
 // up goes up recursively updating the intermediate nodes
 func (t *Tree) up(wTx db.WriteTx, key []byte, siblings [][]byte, path []bool,
 	currLvl, toLvl int) ([]byte, error) {
@@ -479,6 +505,7 @@ func newLeafValue(hashFunc HashFunction, k, v []byte) ([]byte, []byte, error) {
 	}
 	var leafValue []byte
 	leafValue = append(leafValue, byte(PrefixValueLeaf))
+	// REVIEW(Edu) return error if len(k) > 255
 	leafValue = append(leafValue, byte(len(k)))
 	leafValue = append(leafValue, k...)
 	leafValue = append(leafValue, v...)
@@ -488,11 +515,13 @@ func newLeafValue(hashFunc HashFunction, k, v []byte) ([]byte, []byte, error) {
 // ReadLeafValue reads from a byte array the leaf key & value
 func ReadLeafValue(b []byte) ([]byte, []byte) {
 	if len(b) < PrefixValueLen {
+		// REVIEW(Edu): This should be an error / panic
 		return []byte{}, []byte{}
 	}
 
 	kLen := b[1]
 	if len(b) < PrefixValueLen+int(kLen) {
+		// REVIEW(Edu): This should be an error / panic
 		return []byte{}, []byte{}
 	}
 	k := b[PrefixValueLen : PrefixValueLen+kLen]
@@ -514,6 +543,7 @@ func (t *Tree) newIntermediate(l, r []byte) ([]byte, []byte, error) {
 func newIntermediate(hashFunc HashFunction, l, r []byte) ([]byte, []byte, error) {
 	b := make([]byte, PrefixValueLen+hashFunc.Len()*2)
 	b[0] = PrefixValueIntermediate
+	// REVIEW(Edu) error if len(l) > 255
 	b[1] = byte(len(l))
 	copy(b[PrefixValueLen:PrefixValueLen+hashFunc.Len()], l)
 	copy(b[PrefixValueLen+hashFunc.Len():], r)
@@ -529,11 +559,13 @@ func newIntermediate(hashFunc HashFunction, l, r []byte) ([]byte, []byte, error)
 // ReadIntermediateChilds reads from a byte array the two childs keys
 func ReadIntermediateChilds(b []byte) ([]byte, []byte) {
 	if len(b) < PrefixValueLen {
+		// REVIEW(Edu): This should be an error / panic
 		return []byte{}, []byte{}
 	}
 
 	lLen := b[1]
 	if len(b) < PrefixValueLen+int(lLen) {
+		// REVIEW(Edu): This should be an error / panic
 		return []byte{}, []byte{}
 	}
 	l := b[PrefixValueLen : PrefixValueLen+lLen]
@@ -541,6 +573,7 @@ func ReadIntermediateChilds(b []byte) ([]byte, []byte) {
 	return l, r
 }
 
+// REVIEW(Edu) calls to getPath don't check that numLevels <= len(k)*8.  See TestPanic1
 func getPath(numLevels int, k []byte) []bool {
 	path := make([]bool, numLevels)
 	for n := 0; n < numLevels; n++ {
@@ -575,7 +608,9 @@ func (t *Tree) UpdateWithTx(wTx db.WriteTx, k, v []byte) error {
 	var err error
 
 	keyPath := make([]byte, t.hashFunction.Len())
+	// REVIEW(Edu) error if len(k) > len(keyPath)
 	copy(keyPath[:], k)
+	// REVIEW(Edu) See TestPanic1
 	path := getPath(t.maxLevels, keyPath)
 
 	root, err := t.RootWithTx(wTx)
@@ -632,6 +667,7 @@ func (t *Tree) GenProof(k []byte) ([]byte, []byte, []byte, bool, error) {
 // the db.ReadTx that is used.
 func (t *Tree) GenProofWithTx(rTx db.ReadTx, k []byte) ([]byte, []byte, []byte, bool, error) {
 	keyPath := make([]byte, t.hashFunction.Len())
+	// REVIEW(Edu) error if len(k) > len(keyPath)
 	copy(keyPath[:], k)
 
 	root, err := t.RootWithTx(rTx)
@@ -681,6 +717,7 @@ func PackSiblings(hashFunc HashFunction, siblings [][]byte) []byte {
 	l := len(bitmapBytes)
 
 	res := make([]byte, l+1+len(b))
+	// REVIEW(Edu) panic if len(l) > 255
 	res[0] = byte(l) // set the bitmapBytes length
 	copy(res[1:1+l], bitmapBytes)
 	copy(res[1+l:], b)
@@ -697,6 +734,14 @@ func UnpackSiblings(hashFunc HashFunction, b []byte) ([][]byte, error) {
 	emptySibl := make([]byte, hashFunc.Len())
 	var siblings [][]byte
 	for i := 0; i < len(bitmap); i++ {
+		// REVIEW(Edu): Why would this happen?  Shouldn't len(bitmap) == len(siblings)?
+		// Ok I figured it out.  The len(bitmap) is always a multiple
+		// of 8, but in the last 8 slots some trailing positions may be
+		// unused because we store the bitmap length in bytes and not
+		// in bits.  so len(bitmap) is not always equal to the number
+		// of siblings, and that's why this check is required.  I think
+		// writing this here could be useful for a future reviewer of
+		// the code.
 		if iSibl >= len(siblingsBytes) {
 			break
 		}
@@ -748,6 +793,7 @@ func (t *Tree) Get(k []byte) ([]byte, []byte, error) {
 // found in the tree in the leaf that was on the path going to the input key.
 func (t *Tree) GetWithTx(rTx db.ReadTx, k []byte) ([]byte, []byte, error) {
 	keyPath := make([]byte, t.hashFunction.Len())
+	// REVIEW(Edu) error if len(k) > len(keyPath)
 	copy(keyPath[:], k)
 
 	root, err := t.RootWithTx(rTx)
@@ -779,6 +825,7 @@ func CheckProof(hashFunc HashFunction, k, v, root, packedSiblings []byte) (bool,
 	}
 
 	keyPath := make([]byte, hashFunc.Len())
+	// REVIEW(Edu) error if len(k) > len(keyPath)
 	copy(keyPath[:], k)
 
 	key, _, err := newLeafValue(hashFunc, k, v)
@@ -845,6 +892,7 @@ func (t *Tree) GetNLeafsWithTx(rTx db.ReadTx) (int, error) {
 
 // Snapshot returns a read-only copy of the Tree from the given root
 func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
+	// REVIEW(Edu): Why lock here?  What are we locking?
 	t.RLock()
 	defer t.RUnlock()
 
@@ -936,6 +984,7 @@ func (t *Tree) iterWithStop(rTx db.ReadTx, k []byte, currLevel int,
 	}
 	currLevel++
 
+	// REVIEW(Edu): Return value of f for PrefixValueEmpty and PrefixValueLeaf is not used.  See TestEdge3.
 	switch v[0] {
 	case PrefixValueEmpty:
 		f(currLevel, k, v)
@@ -984,6 +1033,11 @@ func (t *Tree) Dump(fromRoot []byte) ([]byte, error) {
 
 	// WARNING current encoding only supports key & values of 255 bytes each
 	// (due using only 1 byte for the length headers).
+	// REVIEW(Edu): If this implementation has a limit on key & values
+	// length, then you should check that length, and if it's > 255 either
+	// return an error or panic.  Otherwise the error will be silent and
+	// you will only detect it when importing the tree if you check the
+	// root!
 	var b []byte
 	err := t.Iterate(fromRoot, func(k, v []byte) {
 		if v[0] != PrefixValueLeaf {
@@ -991,7 +1045,9 @@ func (t *Tree) Dump(fromRoot []byte) ([]byte, error) {
 		}
 		leafK, leafV := ReadLeafValue(v)
 		kv := make([]byte, 2+len(leafK)+len(leafV))
+		// REVIEW(Edu) error if len(leafK) > 255
 		kv[0] = byte(len(leafK))
+		// REVIEW(Edu) error if len(leafV) > 255
 		kv[1] = byte(len(leafV))
 		copy(kv[2:2+len(leafK)], leafK)
 		copy(kv[2+len(leafK):], leafV)
@@ -1018,8 +1074,11 @@ func (t *Tree) ImportDump(b []byte) error {
 	var keys, values [][]byte
 	for {
 		l := make([]byte, 2)
-		_, err = io.ReadFull(r, l)
-		if err == io.EOF {
+		n, err := io.ReadFull(r, l)
+		// REVIEW(Edu): I've added a check on read bytes.  If n !=0 and
+		// err == io.EOF it means there was a single garbage byte at
+		// the end, which we can detect.
+		if n == 0 && err == io.EOF {
 			break
 		} else if err != nil {
 			return err
@@ -1037,7 +1096,7 @@ func (t *Tree) ImportDump(b []byte) error {
 		keys = append(keys, k)
 		values = append(values, v)
 	}
-	if _, err = t.AddBatch(keys, values); err != nil {
+	if _, err := t.AddBatch(keys, values); err != nil {
 		return err
 	}
 	return nil
@@ -1069,6 +1128,8 @@ node [fontname=Monospace,fontsize=10,shape=box]
 	}
 
 	nEmpties := 0
+	// REVIEW(Edu): Simplification suggestion: replace all
+	// hex.EncodeToString by the "%x" fmt specifier.
 	err := t.iterWithStop(rTx, fromRoot, 0, func(currLvl int, k, v []byte) bool {
 		if currLvl == untilLvl {
 			return true // to stop the iter from going down
@@ -1134,6 +1195,8 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 		}
 	}
 	w := bytes.NewBufferString("")
+	// REVIEW(Edu): Simplification suggestion: replace all
+	// hex.EncodeToString by the "%x" fmt specifier.
 	fmt.Fprintf(w,
 		"--------\nGraphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+":\n")
 	err := t.GraphvizFirstNLevels(w, fromRoot, untilLvl)
@@ -1148,6 +1211,7 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 	return nil
 }
 
+// REVIEW(Edu): is circom proofs still TODO? What about circomproofs.go file?
 // TODO circom proofs
 // TODO data structure for proofs (including root, key, value, siblings,
 // hashFunction) + method to verify that data structure

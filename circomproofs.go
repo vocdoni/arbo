@@ -39,9 +39,10 @@ func (cvp CircomVerifierProof) MarshalJSON() ([]byte, error) {
 }
 
 func siblingsToStringArray(s [][]byte) []string {
-	var r []string
+	// REVIEW(Edu): More efficient:
+	r := make([]string, len(s))
 	for i := 0; i < len(s); i++ {
-		r = append(r, BytesToBigInt(s[i]).String())
+		r[i] = BytesToBigInt(s[i]).String()
 	}
 	return r
 }
