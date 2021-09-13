@@ -63,6 +63,32 @@ func testInit(c *qt.C, n int) (*Tree, *Tree) {
 	return tree1, tree2
 }
 
+// func TestEdge4(t *testing.T) {
+// 	c := qt.New(t)
+// 	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+// 	c.Assert(err, qt.IsNil)
+// 	tree, err := NewTree(database, 256, HashFunctionSha256)
+// 	c.Assert(err, qt.IsNil)
+// 	defer tree.db.Close() //nolint:errcheck
+//
+// 	c.Assert(tree.Add([]byte{0, 0, 0}, []byte{0}), qt.IsNil)
+// 	c.Assert(tree.Add([]byte{0, 1, 0}, []byte{0}), qt.IsNil)
+// 	c.Assert(tree.Add([]byte{1, 1, 0}, []byte{0}), qt.IsNil)
+//
+// 	var n = 16
+// 	keys := make([][]byte, n)
+// 	for i := range keys {
+// 		keys[i] = []byte{0, 0, byte(i + 1)}
+// 	}
+// 	values := make([][]byte, n)
+// 	for i := range keys {
+// 		values[i] = []byte{byte(i + 1)}
+// 	}
+// 	failed, err := tree.AddBatch(keys, values)
+// 	c.Assert(err, qt.IsNil)
+// 	c.Assert(len(failed), qt.Equals, 0)
+// }
+
 func TestAddBatchTreeEmpty(t *testing.T) {
 	c := qt.New(t)
 

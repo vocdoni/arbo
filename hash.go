@@ -28,7 +28,7 @@ var (
 	HashFunctionBlake2b HashBlake2b
 )
 
-// Once Generics are at Go, this will be updated (August 2021
+// Once Generics are at Go, this will be updated (December 2021
 // https://blog.golang.org/generics-next-step)
 
 // HashFunction defines the interface that is expected for a hash function to be
@@ -56,12 +56,14 @@ func (f HashSha256) Len() int {
 
 // Hash implements the hash method for the HashFunction HashSha256
 func (f HashSha256) Hash(b ...[]byte) ([]byte, error) {
-	var toHash []byte
-	for i := 0; i < len(b); i++ {
-		toHash = append(toHash, b[i]...)
+	// REVIEW(Edu): No need to allocate. See:
+	h := sha256.New()
+	for _, buf := range b {
+		if _, err := h.Write(buf); err != nil {
+			return nil, err
+		}
 	}
-	h := sha256.Sum256(toHash)
-	return h[:], nil
+	return h.Sum(nil), nil
 }
 
 // HashPoseidon implements the HashFunction interface for the Poseidon hash
