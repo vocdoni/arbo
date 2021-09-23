@@ -1,6 +1,7 @@
 package arbo
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	"math/big"
 	"testing"
@@ -614,6 +615,60 @@ func benchmarkAdd(b *testing.B, hashFunc HashFunction, ks, vs [][]byte) {
 	for i := 0; i < len(ks); i++ {
 		if err := tree.Add(ks[i], vs[i]); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkHash(b *testing.B) {
+	b.Run("Sha256", func(b *testing.B) { benchmarkHash(b, HashFunctionSha256) })
+	b.Run("Blake2b", func(b *testing.B) { benchmarkHash(b, HashFunctionBlake2b) })
+	b.Run("Poseidon", func(b *testing.B) { benchmarkHash(b, HashFunctionPoseidon) })
+}
+
+func benchmarkHash(b *testing.B, hashFunc HashFunction) {
+	value := [128]byte{}
+	for i := 0; i < b.N; i++ {
+		//nolint:errcheck,gosec // we are benchmarking the hash
+		//function, so we skip error checks
+		hashFunc.Hash(value[:])
+	}
+}
+
+func BenchmarkByHash(b *testing.B) {
+	lvl := 10
+	b.Run("Sha256", func(b *testing.B) { benchmarkByHash(b, HashFunctionSha256, lvl) })
+	b.Run("Blake2b", func(b *testing.B) { benchmarkByHash(b, HashFunctionBlake2b, lvl) })
+	b.Run("Poseidon", func(b *testing.B) { benchmarkByHash(b, HashFunctionPoseidon, lvl) })
+}
+
+func benchmarkByHash(b *testing.B, hashFunc HashFunction, lvl int) {
+	n := 2 << lvl // n = 2**lvl
+
+	c := qt.New(b)
+	database, err := badgerdb.New(badgerdb.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	tree, err := NewTree(database, 32, hashFunc)
+	c.Assert(err, qt.IsNil)
+	defer tree.db.Close() //nolint:errcheck
+
+	var key [4]byte
+	var value [4]byte
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint32(key[:], uint32(i%n))
+		binary.LittleEndian.PutUint32(value[:], uint32(i%n))
+		qt.Assert(b, tree.Add(key[:], value[:]), qt.IsNil)
+	}
+
+	tx := database.WriteTx()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		binary.LittleEndian.PutUint32(key[:], uint32(i%n))
+		binary.LittleEndian.PutUint32(value[:], uint32(i%n))
+		qt.Assert(b, tree.UpdateWithTx(tx, key[:], value[:]), qt.IsNil)
+		// Commit from time to time to avoid reaching the tx size limit
+		if i%(1000/lvl) == 0 {
+			qt.Assert(b, tx.Commit(), qt.IsNil)
+			tx = database.WriteTx()
 		}
 	}
 }
