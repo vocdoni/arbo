@@ -2,6 +2,8 @@
 
 > *arbo*: tree in Esperanto.
 
+**Note**: This Go module has moved to the `arbo` package under https://github.com/vocdoni/vocdoni-node. See https://github.com/vocdoni/vocdoni-node/pull/779. The repository remains archived to not lose information and not confuse any contributors.
+
 MerkleTree implementation in Go. Compatible with the circomlib implementation of
 the MerkleTree. Specification: https://docs.iden3.io/publications/pdfs/Merkle-Tree.pdf and https://eprint.iacr.org/2018/955.
 
