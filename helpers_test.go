@@ -10,7 +10,7 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/badgerdb"
+	"go.vocdoni.io/dvote/db/pebbledb"
 )
 
 func checkRoots(c *qt.C, tree1, tree2 *Tree) {
@@ -88,13 +88,13 @@ func TestReadTreeDBG(t *testing.T) {
 
 	c := qt.New(t)
 
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{Database: database1, MaxLevels: 100,
 		HashFunction: HashFunctionBlake2b})
 	c.Assert(err, qt.IsNil)
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{Database: database2, MaxLevels: 100,
 		HashFunction: HashFunctionBlake2b})

@@ -12,8 +12,8 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/vocdoni/arbo/memdb"
 	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/badgerdb"
 	"go.vocdoni.io/dvote/db/pebbledb"
 )
 
@@ -40,14 +40,12 @@ func debugTime(descr string, time1, time2 time.Duration) {
 }
 
 func testInit(c *qt.C, n int) (*Tree, *Tree) {
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
+	database1 := memdb.New()
 	tree1, err := NewTree(Config{Database: database1, MaxLevels: 256,
 		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
+	database2 := memdb.New()
 	tree2, err := NewTree(Config{Database: database2, MaxLevels: 256,
 		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
@@ -73,7 +71,7 @@ func TestAddBatchTreeEmpty(t *testing.T) {
 
 	nLeafs := 1024
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -97,7 +95,7 @@ func TestAddBatchTreeEmpty(t *testing.T) {
 	}
 	time1 := time.Since(start)
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -125,7 +123,7 @@ func TestAddBatchTreeEmptyNotPowerOf2(t *testing.T) {
 
 	nLeafs := 1027
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -141,7 +139,7 @@ func TestAddBatchTreeEmptyNotPowerOf2(t *testing.T) {
 		}
 	}
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -174,14 +172,14 @@ func randomBytes(n int) []byte {
 
 func TestAddBatchTestVector1(t *testing.T) {
 	c := qt.New(t)
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database1, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
 	c.Assert(err, qt.IsNil)
 	defer tree1.db.Close() //nolint:errcheck
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -216,14 +214,14 @@ func TestAddBatchTestVector1(t *testing.T) {
 	checkRoots(c, tree1, tree2)
 
 	// 2nd test vectors
-	database1, err = badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err = pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err = NewTree(Config{database1, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
 	c.Assert(err, qt.IsNil)
 	defer tree1.db.Close() //nolint:errcheck
 
-	database2, err = badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err = pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err = NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -266,14 +264,14 @@ func TestAddBatchTestVector2(t *testing.T) {
 	// test vector with unbalanced tree
 	c := qt.New(t)
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 	defer tree1.db.Close() //nolint:errcheck
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -313,14 +311,14 @@ func TestAddBatchTestVector3(t *testing.T) {
 	// test vector with unbalanced tree
 	c := qt.New(t)
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 	defer tree1.db.Close() //nolint:errcheck
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -364,14 +362,14 @@ func TestAddBatchTreeEmptyRandomKeys(t *testing.T) {
 
 	nLeafs := 8
 
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database1, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
 	c.Assert(err, qt.IsNil)
 	defer tree1.db.Close() //nolint:errcheck
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -716,7 +714,7 @@ func TestAddBatchNotEmptyUnbalanced(t *testing.T) {
 	}
 	time1 := time.Since(start)
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -775,7 +773,7 @@ func TestFlp2(t *testing.T) {
 
 func TestAddBatchBench(t *testing.T) {
 	nLeafs := 50_000
-	printTestContext("TestAddBatchBench: ", nLeafs, "Blake2b", "badgerdb")
+	printTestContext("TestAddBatchBench: ", nLeafs, "Blake2b", "pebbledb")
 
 	// prepare inputs
 	var ks, vs [][]byte
@@ -794,7 +792,7 @@ func TestAddBatchBench(t *testing.T) {
 func benchAdd(t *testing.T, ks, vs [][]byte) {
 	c := qt.New(t)
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -815,7 +813,7 @@ func benchAdd(t *testing.T, ks, vs [][]byte) {
 func benchAddBatch(t *testing.T, ks, vs [][]byte) {
 	c := qt.New(t)
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -849,7 +847,7 @@ func TestDbgStats(t *testing.T) {
 	}
 
 	// 1
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database1, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -864,7 +862,7 @@ func TestDbgStats(t *testing.T) {
 	}
 
 	// 2
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -878,7 +876,7 @@ func TestDbgStats(t *testing.T) {
 	c.Assert(len(invalids), qt.Equals, 0)
 
 	// 3
-	database3, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database3, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree3, err := NewTree(Config{database3, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -914,8 +912,7 @@ func TestLoadVT(t *testing.T) {
 
 	nLeafs := 1024
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
+	database := memdb.New()
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
@@ -932,9 +929,7 @@ func TestLoadVT(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(len(invalids), qt.Equals, 0)
 
-	rTx := tree.db.ReadTx()
-	defer rTx.Discard()
-	vt, err := tree.loadVT(rTx)
+	vt, err := tree.loadVT()
 	c.Assert(err, qt.IsNil)
 	_, err = vt.computeHashes()
 	c.Assert(err, qt.IsNil)
@@ -951,7 +946,7 @@ func TestAddKeysWithEmptyValues(t *testing.T) {
 
 	nLeafs := 1024
 
-	database, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{database, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -973,7 +968,7 @@ func TestAddKeysWithEmptyValues(t *testing.T) {
 		}
 	}
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -988,7 +983,7 @@ func TestAddKeysWithEmptyValues(t *testing.T) {
 	checkRoots(c, tree, tree2)
 
 	// use tree3 to add nil value array
-	database3, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database3, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree3, err := NewTree(Config{database3, 256, DefaultThresholdNLeafs,
 		HashFunctionPoseidon})
@@ -1038,7 +1033,7 @@ func TestAddBatchThresholdInDisk(t *testing.T) {
 	// customize thresholdNLeafs for the test
 	testThresholdNLeafs := 1024
 
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database1, 256, testThresholdNLeafs,
 		HashFunctionBlake2b})
@@ -1106,13 +1101,13 @@ func TestAddBatchThresholdInDisk(t *testing.T) {
 }
 
 func initTestUpFromSubRoots(c *qt.C) (*Tree, *Tree) {
-	database1, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree1, err := NewTree(Config{database1, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
 	c.Assert(err, qt.IsNil)
 
-	database2, err := badgerdb.New(db.Options{Path: c.TempDir()})
+	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree2, err := NewTree(Config{database2, 256, DefaultThresholdNLeafs,
 		HashFunctionBlake2b})
