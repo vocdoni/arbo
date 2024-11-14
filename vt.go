@@ -625,7 +625,7 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 	return pairs, nil
 }
 
-//nolint:all
+//nolint:unused
 func (t *vt) graphviz(w io.Writer) error {
 	if _, err := fmt.Fprintf(w, `digraph hierarchy {
 node [fontname=Monospace,fontsize=10,shape=box]
@@ -641,7 +641,7 @@ node [fontname=Monospace,fontsize=10,shape=box]
 	return nil
 }
 
-//nolint:all
+//nolint:unused
 func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 	if n == nil {
 		return nEmpties, nil
@@ -720,7 +720,7 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 	return nEmpties, nil
 }
 
-//nolint:all
+//nolint:unused
 func (t *vt) printGraphviz() error {
 	w := bytes.NewBufferString("")
 	if _, err := fmt.Fprintf(w,

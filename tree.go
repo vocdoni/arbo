@@ -1555,7 +1555,7 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 	}
 	w := bytes.NewBufferString("")
 	if _, err := fmt.Fprintf(w,
-		"--------\nGraphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+":\n"); err != nil {
+		"--------\nGraphviz of the Tree with Root %s:\n", hex.EncodeToString(fromRoot)); err != nil {
 		return err
 	}
 	err := t.GraphvizFirstNLevels(w, fromRoot, untilLvl)
@@ -1564,7 +1564,7 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 		return err
 	}
 	if _, err := fmt.Fprintf(w,
-		"End of Graphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+"\n--------\n"); err != nil {
+		"End of Graphviz of the Tree with Root %s\n--------\n", hex.EncodeToString(fromRoot)); err != nil {
 		return err
 	}
 
