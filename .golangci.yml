@@ -13,6 +13,8 @@ linters:
         - lll
         - golint
         - gocyclo
+        disable:
+        - unused
 linters-settings:
         lll:
                 line-length: 100
