@@ -171,7 +171,7 @@ func (t *vt) addBatch(ks, vs [][]byte) ([]Invalid, error) {
 		}
 	}
 	if len(nodesAtL) != nCPU {
-		return nil, fmt.Errorf("This error should not be reached."+
+		return nil, fmt.Errorf("this error should not be reached."+
 			" len(nodesAtL) != nCPU, len(nodesAtL)=%d, nCPU=%d."+
 			" Please report it in a new issue:"+
 			" https://github.com/vocdoni/arbo/issues/new", len(nodesAtL), nCPU)
@@ -239,7 +239,7 @@ func (n *node) getNodesAtLevel(currLvl, l int) ([]*node, error) {
 		return []*node{n}, nil
 	}
 	if currLvl >= l {
-		return nil, fmt.Errorf("This error should not be reached."+
+		return nil, fmt.Errorf("this error should not be reached."+
 			" currLvl >= l, currLvl=%d, l=%d."+
 			" Please report it in a new issue:"+
 			" https://github.com/vocdoni/arbo/issues/new", currLvl, l)
@@ -625,7 +625,7 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 	return pairs, nil
 }
 
-//nolint:unused
+//nolint:all
 func (t *vt) graphviz(w io.Writer) error {
 	fmt.Fprintf(w, `digraph hierarchy {
 node [fontname=Monospace,fontsize=10,shape=box]
@@ -637,7 +637,7 @@ node [fontname=Monospace,fontsize=10,shape=box]
 	return nil
 }
 
-//nolint:unused
+//nolint:all
 func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 	if n == nil {
 		return nEmpties, nil
@@ -704,7 +704,7 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 	return nEmpties, nil
 }
 
-//nolint:unused
+//nolint:all
 func (t *vt) printGraphviz() error {
 	w := bytes.NewBufferString("")
 	fmt.Fprintf(w,

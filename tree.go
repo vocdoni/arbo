@@ -303,7 +303,7 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	}
 
 	if len(subRoots) != nCPU {
-		return nil, fmt.Errorf("This error should not be reached."+
+		return nil, fmt.Errorf("this error should not be reached."+
 			" len(subRoots) != nCPU, len(subRoots)=%d, nCPU=%d."+
 			" Please report it in a new issue:"+
 			" https://github.com/vocdoni/arbo/issues/new", len(subRoots), nCPU)

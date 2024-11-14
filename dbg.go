@@ -28,7 +28,7 @@ func (d *dbgStats) incHash() {
 	d.hash++
 }
 
-//nolint:unused
+//nolint:all
 func (d *dbgStats) incDbGet() {
 	if d == nil {
 		return
@@ -36,7 +36,7 @@ func (d *dbgStats) incDbGet() {
 	d.dbGet++
 }
 
-//nolint:unused
+//nolint:all
 func (d *dbgStats) incDbPut() {
 	if d == nil {
 		return
