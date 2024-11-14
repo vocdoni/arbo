@@ -30,6 +30,9 @@ var (
 	// HashFunctionBlake2b contains the HashBlake2b struct which implements
 	// the HashFunction interface
 	HashFunctionBlake2b HashBlake2b
+	// HashFunctionMiMC_BLS12_377 contains the HashMiMC_BLS12_377 struct which
+	// implements the HashFunction interface
+	HashFunctionMiMC_BLS12_377 HashMiMC_BLS12_377
 )
 
 // Once Generics are at Go, this will be updated (August 2021
