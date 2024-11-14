@@ -1463,9 +1463,11 @@ func (t *Tree) Graphviz(w io.Writer, fromRoot []byte) error {
 // generate a string Graphviz representation of the first NLevels of the tree
 // and writes it to w
 func (t *Tree) GraphvizFirstNLevels(w io.Writer, fromRoot []byte, untilLvl int) error {
-	fmt.Fprintf(w, `digraph hierarchy {
+	if _, err := fmt.Fprintf(w, `digraph hierarchy {
 node [fontname=Monospace,fontsize=10,shape=box]
-`)
+`); err != nil {
+		return err
+	}
 	if fromRoot == nil {
 		var err error
 		fromRoot, err = t.RootWithTx(t.db)
@@ -1482,14 +1484,20 @@ node [fontname=Monospace,fontsize=10,shape=box]
 		switch v[0] {
 		case PrefixValueEmpty:
 		case PrefixValueLeaf:
-			fmt.Fprintf(w, "\"%v\" [style=filled];\n", hex.EncodeToString(k[:nChars]))
+			if _, err := fmt.Fprintf(w, "\"%v\" [style=filled];\n", hex.EncodeToString(k[:nChars])); err != nil {
+				return false
+			}
 			// key & value from the leaf
 			kB, vB := ReadLeafValue(v)
-			fmt.Fprintf(w, "\"%v\" -> {\"k:%v\\nv:%v\"}\n",
+			if _, err := fmt.Fprintf(w, "\"%v\" -> {\"k:%v\\nv:%v\"}\n",
 				hex.EncodeToString(k[:nChars]), hex.EncodeToString(kB[:nChars]),
-				hex.EncodeToString(vB[:nChars]))
-			fmt.Fprintf(w, "\"k:%v\\nv:%v\" [style=dashed]\n",
-				hex.EncodeToString(kB[:nChars]), hex.EncodeToString(vB[:nChars]))
+				hex.EncodeToString(vB[:nChars])); err != nil {
+				return false
+			}
+			if _, err := fmt.Fprintf(w, "\"k:%v\\nv:%v\" [style=dashed]\n",
+				hex.EncodeToString(kB[:nChars]), hex.EncodeToString(vB[:nChars])); err != nil {
+				return false
+			}
 		case PrefixValueIntermediate:
 			l, r := ReadIntermediateChilds(v)
 			lStr := hex.EncodeToString(l[:nChars])
@@ -1507,14 +1515,20 @@ node [fontname=Monospace,fontsize=10,shape=box]
 					rStr)
 				nEmpties++
 			}
-			fmt.Fprintf(w, "\"%v\" -> {\"%v\" \"%v\"}\n", hex.EncodeToString(k[:nChars]),
-				lStr, rStr)
-			fmt.Fprint(w, eStr)
+			if _, err := fmt.Fprintf(w, "\"%v\" -> {\"%v\" \"%v\"}\n", hex.EncodeToString(k[:nChars]),
+				lStr, rStr); err != nil {
+				return false
+			}
+			if _, err := fmt.Fprint(w, eStr); err != nil {
+				return false
+			}
 		default:
 		}
 		return false
 	})
-	fmt.Fprintf(w, "}\n")
+	if _, err := fmt.Fprintf(w, "}\n"); err != nil {
+		return err
+	}
 	return err
 }
 
@@ -1540,15 +1554,19 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 		}
 	}
 	w := bytes.NewBufferString("")
-	fmt.Fprintf(w,
-		"--------\nGraphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+":\n")
+	if _, err := fmt.Fprintf(w,
+		"--------\nGraphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+":\n"); err != nil {
+		return err
+	}
 	err := t.GraphvizFirstNLevels(w, fromRoot, untilLvl)
 	if err != nil {
 		fmt.Println(w)
 		return err
 	}
-	fmt.Fprintf(w,
-		"End of Graphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+"\n--------\n")
+	if _, err := fmt.Fprintf(w,
+		"End of Graphviz of the Tree with Root "+hex.EncodeToString(fromRoot)+"\n--------\n"); err != nil {
+		return err
+	}
 
 	fmt.Println(w)
 	return nil
