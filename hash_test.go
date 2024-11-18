@@ -53,3 +53,17 @@ func TestHashBlake2b(t *testing.T) {
 		qt.Equals,
 		"928b20366943e2afd11ebc0eae2e53a93bf177a4fcf35bcc64d503704e65e202")
 }
+
+func TestHashMiMC(t *testing.T) {
+	// MiMC hash
+	HashFunction := &HashMiMC_BLS12_377{}
+	b := []byte("test")
+	h, err := HashFunction.Hash(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := qt.New(t)
+	c.Assert(hex.EncodeToString(h),
+		qt.Equals,
+		"f881f34991492d823e02565c778b824bac5eacef6340b70ee90a8966a2e63900")
+}
