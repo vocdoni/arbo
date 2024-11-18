@@ -144,9 +144,9 @@ func (f HashMiMC_BLS12_377) Len() int {
 func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
 	h := mimc.NewMiMC()
 	for i := 0; i < len(b); i++ {
-		if _, err := h.Write(b[i]); err != nil {
+		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
 			return nil, err
 		}
 	}
-	return h.Sum(nil), nil
+	return SwapEndianness(h.Sum(nil)), nil
 }
