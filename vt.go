@@ -171,7 +171,7 @@ func (t *vt) addBatch(ks, vs [][]byte) ([]Invalid, error) {
 		}
 	}
 	if len(nodesAtL) != nCPU {
-		return nil, fmt.Errorf("This error should not be reached."+
+		return nil, fmt.Errorf("this error should not be reached."+
 			" len(nodesAtL) != nCPU, len(nodesAtL)=%d, nCPU=%d."+
 			" Please report it in a new issue:"+
 			" https://github.com/vocdoni/arbo/issues/new", len(nodesAtL), nCPU)
@@ -239,7 +239,7 @@ func (n *node) getNodesAtLevel(currLvl, l int) ([]*node, error) {
 		return []*node{n}, nil
 	}
 	if currLvl >= l {
-		return nil, fmt.Errorf("This error should not be reached."+
+		return nil, fmt.Errorf("this error should not be reached."+
 			" currLvl >= l, currLvl=%d, l=%d."+
 			" Please report it in a new issue:"+
 			" https://github.com/vocdoni/arbo/issues/new", currLvl, l)
@@ -627,13 +627,17 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 
 //nolint:unused
 func (t *vt) graphviz(w io.Writer) error {
-	fmt.Fprintf(w, `digraph hierarchy {
+	if _, err := fmt.Fprintf(w, `digraph hierarchy {
 node [fontname=Monospace,fontsize=10,shape=box]
-`)
+`); err != nil {
+		return err
+	}
 	if _, err := t.root.graphviz(w, t.params, 0); err != nil {
 		return err
 	}
-	fmt.Fprintf(w, "}\n")
+	if _, err := fmt.Fprintf(w, "}\n"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -650,7 +654,9 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 		if err != nil {
 			return nEmpties, err
 		}
-		fmt.Fprintf(w, "\"%p\" [style=filled,label=\"%v\"];\n", n, hex.EncodeToString(leafKey[:nChars]))
+		if _, err := fmt.Fprintf(w, "\"%p\" [style=filled,label=\"%v\"];\n", n, hex.EncodeToString(leafKey[:nChars])); err != nil {
+			return nEmpties, err
+		}
 
 		k := n.k
 		v := n.v
@@ -661,14 +667,20 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 			v = n.v[:nChars]
 		}
 
-		fmt.Fprintf(w, "\"%p\" -> {\"k:%v\\nv:%v\"}\n", n,
+		if _, err := fmt.Fprintf(w, "\"%p\" -> {\"k:%v\\nv:%v\"}\n", n,
 			hex.EncodeToString(k),
-			hex.EncodeToString(v))
-		fmt.Fprintf(w, "\"k:%v\\nv:%v\" [style=dashed]\n",
+			hex.EncodeToString(v)); err != nil {
+			return nEmpties, err
+		}
+		if _, err := fmt.Fprintf(w, "\"k:%v\\nv:%v\" [style=dashed]\n",
 			hex.EncodeToString(k),
-			hex.EncodeToString(v))
+			hex.EncodeToString(v)); err != nil {
+			return nEmpties, err
+		}
 	case vtMid:
-		fmt.Fprintf(w, "\"%p\" [label=\"\"];\n", n)
+		if _, err := fmt.Fprintf(w, "\"%p\" [label=\"\"];\n", n); err != nil {
+			return nEmpties, err
+		}
 
 		lStr := fmt.Sprintf("%p", n.l)
 		rStr := fmt.Sprintf("%p", n.r)
@@ -685,8 +697,12 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 				rStr)
 			nEmpties++
 		}
-		fmt.Fprintf(w, "\"%p\" -> {\"%v\" \"%v\"}\n", n, lStr, rStr)
-		fmt.Fprint(w, eStr)
+		if _, err := fmt.Fprintf(w, "\"%p\" -> {\"%v\" \"%v\"}\n", n, lStr, rStr); err != nil {
+			return nEmpties, err
+		}
+		if _, err := fmt.Fprint(w, eStr); err != nil {
+			return nEmpties, err
+		}
 		nEmpties, err := n.l.graphviz(w, p, nEmpties)
 		if err != nil {
 			return nEmpties, err
@@ -707,15 +723,19 @@ func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
 //nolint:unused
 func (t *vt) printGraphviz() error {
 	w := bytes.NewBufferString("")
-	fmt.Fprintf(w,
-		"--------\nGraphviz:\n")
+	if _, err := fmt.Fprintf(w,
+		"--------\nGraphviz:\n"); err != nil {
+		return err
+	}
 	err := t.graphviz(w)
 	if err != nil {
 		fmt.Println(w)
 		return err
 	}
-	fmt.Fprintf(w,
-		"End of Graphviz --------\n")
+	if _, err := fmt.Fprintf(w,
+		"End of Graphviz --------\n"); err != nil {
+		return err
+	}
 	fmt.Println(w)
 	return nil
 }

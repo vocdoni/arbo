@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"math/big"
 
+	"github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	"golang.org/x/crypto/blake2b"
 )
@@ -16,6 +17,9 @@ var (
 	TypeHashPoseidon = []byte("poseidon")
 	// TypeHashBlake2b represents the label for the HashFunction of Blake2b
 	TypeHashBlake2b = []byte("blake2b")
+	// TypeHashMiMC_BLS12_377 represents the label for the HashFunction of MiMC
+	// over BLS12-377 curve
+	TypeHashMiMC_BLS12_377 = []byte("mimc_bls12_377")
 
 	// HashFunctionSha256 contains the HashSha256 struct which implements
 	// the HashFunction interface
@@ -26,6 +30,9 @@ var (
 	// HashFunctionBlake2b contains the HashBlake2b struct which implements
 	// the HashFunction interface
 	HashFunctionBlake2b HashBlake2b
+	// HashFunctionMiMC_BLS12_377 contains the HashMiMC_BLS12_377 struct which
+	// implements the HashFunction interface
+	HashFunctionMiMC_BLS12_377 HashMiMC_BLS12_377
 )
 
 // Once Generics are at Go, this will be updated (August 2021
@@ -37,8 +44,6 @@ type HashFunction interface {
 	Type() []byte
 	Len() int
 	Hash(...[]byte) ([]byte, error)
-	// CheckInput checks if the input is valid without computing the hash
-	// CheckInput(...[]byte) error
 }
 
 // HashSha256 implements the HashFunction interface for the Sha256 hash
@@ -119,4 +124,29 @@ func (f HashBlake2b) Hash(b ...[]byte) ([]byte, error) {
 		}
 	}
 	return hasher.Sum(nil), nil
+}
+
+// HashMiMC_BLS12_377 implements the HashFunction interface for the MiMC hash
+// over the BLS12-377 curve
+type HashMiMC_BLS12_377 struct{}
+
+// Type returns the type of HashFunction for the HashMiMC_BLS12_377
+func (f HashMiMC_BLS12_377) Type() []byte {
+	return TypeHashMiMC_BLS12_377
+}
+
+// Len returns the length of the Hash output for the HashMiMC_BLS12_377
+func (f HashMiMC_BLS12_377) Len() int {
+	return mimc.BlockSize
+}
+
+// Hash implements the hash method for the HashFunction HashMiMC_BLS12_377
+func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
+	h := mimc.NewMiMC()
+	for i := 0; i < len(b); i++ {
+		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
+			return nil, err
+		}
+	}
+	return SwapEndianness(h.Sum(nil)), nil
 }
