@@ -6,6 +6,7 @@ import (
 
 	"github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -15,6 +16,9 @@ var (
 	// TypeHashPoseidon represents the label for the HashFunction of
 	// Poseidon
 	TypeHashPoseidon = []byte("poseidon")
+	// TypeHashPoseidon represents the label for the HashFunction of
+	// Poseidon
+	TypeHashMultiPoseidon = []byte("multiposeidon")
 	// TypeHashBlake2b represents the label for the HashFunction of Blake2b
 	TypeHashBlake2b = []byte("blake2b")
 	// TypeHashMiMC_BLS12_377 represents the label for the HashFunction of MiMC
@@ -27,6 +31,9 @@ var (
 	// HashFunctionPoseidon contains the HashPoseidon struct which implements
 	// the HashFunction interface
 	HashFunctionPoseidon HashPoseidon
+	// HashFunctionMultiPoseidon contains the HashMultiPoseidon struct which implements
+	// the HashFunction interface
+	HashFunctionMultiPoseidon HashMultiPoseidon
 	// HashFunctionBlake2b contains the HashBlake2b struct which implements
 	// the HashFunction interface
 	HashFunctionBlake2b HashBlake2b
@@ -97,6 +104,44 @@ func (f HashPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	}
 	hB := BigIntToBytes(f.Len(), h)
 	return hB, nil
+}
+
+// HashMultiPoseidon implements the HashFunction interface for the MultiPoseidon hash
+type HashMultiPoseidon struct{}
+
+// Type returns the type of HashFunction for the HashMultiPoseidon
+func (f HashMultiPoseidon) Type() []byte {
+	return TypeHashMultiPoseidon
+}
+
+// Len returns the length of the Hash output
+func (f HashMultiPoseidon) Len() int {
+	return 32 //nolint:gomnd
+}
+
+// Hash implements the hash method for the HashFunction HashMultiPoseidon. It
+// expects the byte arrays to be little-endian representations of big.Int
+// values. Notably, if any input is longer than 32 bytes (f.Len()), it will split it
+// into 32 bytes chunks and interpret each of them as a big.Int value.
+// so Hash({[64]byte}) and Hash({[32]byte, [32]byte}) will yield the same result.
+func (f HashMultiPoseidon) Hash(b ...[]byte) ([]byte, error) {
+	var bigints []*big.Int
+	for _, input := range b {
+		// Split input into chunks of 32 bytes
+		for start := 0; start < len(input); start += f.Len() {
+			end := start + f.Len()
+			if end > len(input) {
+				end = len(input)
+			}
+			// Convert each chunk into a big.Int
+			bigints = append(bigints, BytesToBigInt(input[start:end]))
+		}
+	}
+	h, err := multiposeidon.MultiPoseidon(bigints...)
+	if err != nil {
+		return nil, err
+	}
+	return BigIntToBytes(f.Len(), h), nil
 }
 
 // HashBlake2b implements the HashFunction interface for the Blake2b hash
