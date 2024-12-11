@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	"github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
+	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
+	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/iden3/go-iden3-crypto/poseidon"
+	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -15,11 +17,17 @@ var (
 	// TypeHashPoseidon represents the label for the HashFunction of
 	// Poseidon
 	TypeHashPoseidon = []byte("poseidon")
+	// TypeHashPoseidon represents the label for the HashFunction of
+	// Poseidon
+	TypeHashMultiPoseidon = []byte("multiposeidon")
 	// TypeHashBlake2b represents the label for the HashFunction of Blake2b
 	TypeHashBlake2b = []byte("blake2b")
 	// TypeHashMiMC_BLS12_377 represents the label for the HashFunction of MiMC
 	// over BLS12-377 curve
 	TypeHashMiMC_BLS12_377 = []byte("mimc_bls12_377")
+	// TypeHashMiMC_BN254 represents the label for the HashFunction of MiMC
+	// over BN254 curve
+	TypeHashMiMC_BN254 = []byte("mimc_bn254")
 
 	// HashFunctionSha256 contains the HashSha256 struct which implements
 	// the HashFunction interface
@@ -27,12 +35,18 @@ var (
 	// HashFunctionPoseidon contains the HashPoseidon struct which implements
 	// the HashFunction interface
 	HashFunctionPoseidon HashPoseidon
+	// HashFunctionMultiPoseidon contains the HashMultiPoseidon struct which implements
+	// the HashFunction interface
+	HashFunctionMultiPoseidon HashMultiPoseidon
 	// HashFunctionBlake2b contains the HashBlake2b struct which implements
 	// the HashFunction interface
 	HashFunctionBlake2b HashBlake2b
 	// HashFunctionMiMC_BLS12_377 contains the HashMiMC_BLS12_377 struct which
 	// implements the HashFunction interface
 	HashFunctionMiMC_BLS12_377 HashMiMC_BLS12_377
+	// HashFunctionMiMC_BN254 contains the HashMiMC_BN254 struct which
+	// implements the HashFunction interface
+	HashFunctionMiMC_BN254 HashMiMC_BN254
 )
 
 // Once Generics are at Go, this will be updated (August 2021
@@ -99,6 +113,47 @@ func (f HashPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	return hB, nil
 }
 
+// HashMultiPoseidon implements the HashFunction interface for the MultiPoseidon hash
+type HashMultiPoseidon struct{}
+
+// Type returns the type of HashFunction for the HashMultiPoseidon
+func (f HashMultiPoseidon) Type() []byte {
+	return TypeHashMultiPoseidon
+}
+
+// Len returns the length of the Hash output
+func (f HashMultiPoseidon) Len() int {
+	return 32 //nolint:gomnd
+}
+
+// Hash implements the hash method for the HashFunction HashMultiPoseidon. It
+// expects the byte arrays to be little-endian representations of big.Int
+// values. Notably, if any input is longer than 32 bytes (f.Len()), it will split it
+// into 32 bytes chunks and interpret each of them as a big.Int value.
+// so Hash({[64]byte}) and Hash({[32]byte, [32]byte}) will yield the same result.
+func (f HashMultiPoseidon) Hash(b ...[]byte) ([]byte, error) {
+	var toHash []*big.Int
+	for _, input := range b {
+		// Split input into chunks of 32 bytes
+		for start := 0; start < len(input); start += f.Len() {
+			end := start + f.Len()
+			if end > len(input) {
+				end = len(input)
+			}
+			// Convert each chunk into a big.Int
+			chunk := input[start:end]
+			bi := BytesToBigInt(chunk)
+			toHash = append(toHash, bi)
+		}
+	}
+	h, err := multiposeidon.MultiPoseidon(toHash...)
+	if err != nil {
+		return nil, err
+	}
+	hB := BigIntToBytes(f.Len(), h)
+	return hB, nil
+}
+
 // HashBlake2b implements the HashFunction interface for the Blake2b hash
 type HashBlake2b struct{}
 
@@ -137,12 +192,37 @@ func (f HashMiMC_BLS12_377) Type() []byte {
 
 // Len returns the length of the Hash output for the HashMiMC_BLS12_377
 func (f HashMiMC_BLS12_377) Len() int {
-	return mimc.BlockSize
+	return mimc_bls12_377.BlockSize
 }
 
 // Hash implements the hash method for the HashFunction HashMiMC_BLS12_377
 func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
-	h := mimc.NewMiMC()
+	h := mimc_bls12_377.NewMiMC()
+	for i := 0; i < len(b); i++ {
+		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
+			return nil, err
+		}
+	}
+	return SwapEndianness(h.Sum(nil)), nil
+}
+
+// HashMiMC_BN254 implements the HashFunction interface for the MiMC hash
+// over the BN254 curve
+type HashMiMC_BN254 struct{}
+
+// Type returns the type of HashFunction for the HashMiMC_BN254
+func (f HashMiMC_BN254) Type() []byte {
+	return TypeHashMiMC_BN254
+}
+
+// Len returns the length of the Hash output for the HashMiMC_BN254
+func (f HashMiMC_BN254) Len() int {
+	return mimc_bn254.BlockSize
+}
+
+// Hash implements the hash method for the HashFunction HashMiMC_BN254
+func (f HashMiMC_BN254) Hash(b ...[]byte) ([]byte, error) {
+	h := mimc_bn254.NewMiMC()
 	for i := 0; i < len(b); i++ {
 		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
 			return nil, err
