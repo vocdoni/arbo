@@ -4,7 +4,8 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	"github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
+	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
+	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
@@ -24,6 +25,9 @@ var (
 	// TypeHashMiMC_BLS12_377 represents the label for the HashFunction of MiMC
 	// over BLS12-377 curve
 	TypeHashMiMC_BLS12_377 = []byte("mimc_bls12_377")
+	// TypeHashMiMC_BN254 represents the label for the HashFunction of MiMC
+	// over BN254 curve
+	TypeHashMiMC_BN254 = []byte("mimc_bn254")
 
 	// HashFunctionSha256 contains the HashSha256 struct which implements
 	// the HashFunction interface
@@ -40,6 +44,9 @@ var (
 	// HashFunctionMiMC_BLS12_377 contains the HashMiMC_BLS12_377 struct which
 	// implements the HashFunction interface
 	HashFunctionMiMC_BLS12_377 HashMiMC_BLS12_377
+	// HashFunctionMiMC_BN254 contains the HashMiMC_BN254 struct which
+	// implements the HashFunction interface
+	HashFunctionMiMC_BN254 HashMiMC_BN254
 )
 
 // Once Generics are at Go, this will be updated (August 2021
@@ -182,15 +189,48 @@ func (f HashMiMC_BLS12_377) Type() []byte {
 
 // Len returns the length of the Hash output for the HashMiMC_BLS12_377
 func (f HashMiMC_BLS12_377) Len() int {
-	return mimc.BlockSize
+	return mimc_bls12_377.BlockSize
 }
 
 // Hash implements the hash method for the HashFunction HashMiMC_BLS12_377
 func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
-	h := mimc.NewMiMC()
+	h := mimc_bls12_377.NewMiMC()
 	for i := 0; i < len(b); i++ {
 		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
 			return nil, err
+		}
+	}
+	return SwapEndianness(h.Sum(nil)), nil
+}
+
+// HashMiMC_BN254 implements the HashFunction interface for the MiMC hash
+// over the BN254 curve
+type HashMiMC_BN254 struct{}
+
+// Type returns the type of HashFunction for the HashMiMC_BN254
+func (f HashMiMC_BN254) Type() []byte {
+	return TypeHashMiMC_BN254
+}
+
+// Len returns the length of the Hash output for the HashMiMC_BN254
+func (f HashMiMC_BN254) Len() int {
+	return mimc_bn254.BlockSize
+}
+
+// Hash implements the hash method for the HashFunction HashMiMC_BN254
+func (f HashMiMC_BN254) Hash(b ...[]byte) ([]byte, error) {
+	h := mimc_bn254.NewMiMC()
+	for _, input := range b {
+		// Since arbo uses little-endian but MiMC expects inputs as big-endian
+		// we need to split long inputs and SwapEndianness of each chunk.
+		for start := 0; start < len(input); start += h.BlockSize() {
+			end := start + h.BlockSize()
+			if end > len(input) {
+				end = len(input)
+			}
+			if _, err := h.Write(SwapEndianness(input[start:end])); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return SwapEndianness(h.Sum(nil)), nil
