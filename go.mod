@@ -5,10 +5,10 @@ go 1.23.2
 toolchain go1.23.4
 
 require (
-	github.com/consensys/gnark-crypto v0.14.1-0.20241010154951-6638408a49f3
+	github.com/consensys/gnark-crypto v0.14.1-0.20241213223322-afee1955665f
 	github.com/frankban/quicktest v1.14.6
 	github.com/iden3/go-iden3-crypto v0.0.17
-	github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241203073504-acbb1b626579
+	github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241212172703-15f6d0594b8e
 	go.vocdoni.io/dvote v1.10.2-0.20241024102542-c1ce6d744bc5
 	golang.org/x/crypto v0.28.0
 )
@@ -24,7 +24,7 @@ require (
 	github.com/cockroachdb/pebble v1.1.2 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
-	github.com/consensys/bavard v0.1.22 // indirect
+	github.com/consensys/bavard v0.1.24 // indirect
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect

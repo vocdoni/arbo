@@ -7,7 +7,7 @@ import (
 	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
 	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/iden3/go-iden3-crypto/poseidon"
-	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/hash/poseidon"
+	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/crypto/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
 )
 
