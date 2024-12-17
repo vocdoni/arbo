@@ -4,8 +4,11 @@ import (
 	"crypto/sha256"
 	"math/big"
 
+	fr_bls12377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
 	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
+	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
+	"github.com/consensys/gnark-crypto/hash"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/crypto/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
@@ -195,12 +198,8 @@ func (f HashMiMC_BLS12_377) Len() int {
 // Hash implements the hash method for the HashFunction HashMiMC_BLS12_377
 func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
 	h := mimc_bls12_377.NewMiMC()
-	for i := 0; i < len(b); i++ {
-		if _, err := h.Write(SwapEndianness(b[i])); err != nil {
-			return nil, err
-		}
-	}
-	return SwapEndianness(h.Sum(nil)), nil
+	q := fr_bls12377.Modulus()
+	return hashMiMCbyChunks(h, q, b...)
 }
 
 // HashMiMC_BN254 implements the HashFunction interface for the MiMC hash
@@ -219,16 +218,50 @@ func (f HashMiMC_BN254) Len() int {
 
 // Hash implements the hash method for the HashFunction HashMiMC_BN254
 func (f HashMiMC_BN254) Hash(b ...[]byte) ([]byte, error) {
+	q := fr_bn254.Modulus()
 	h := mimc_bn254.NewMiMC()
+	return hashMiMCbyChunks(h, q, b...)
+}
+
+// hashMiMCbyChunks is a helper function to hash by chunks using the MiMC hash.
+// It applies the modulo operation to the chunks before hashing.
+func hashMiMCbyChunks(h hash.StateStorer, q *big.Int, b ...[]byte) ([]byte, error) {
 	for _, input := range b {
-		// Since arbo uses little-endian but MiMC expects inputs as big-endian
-		// we need to split long inputs and SwapEndianness of each chunk.
 		for start := 0; start < len(input); start += h.BlockSize() {
 			end := start + h.BlockSize()
 			if end > len(input) {
 				end = len(input)
 			}
-			if _, err := h.Write(SwapEndianness(input[start:end])); err != nil {
+			chunk := input[start:end]
+
+			// Convert chunk to big.Int (big-endian)
+			// The chunk might be less than h.BlockSize(), so zero-pad if needed.
+			buf := make([]byte, h.BlockSize())
+			copy(buf, chunk)
+
+			// Endianness: Swap to big-endian if necessary.
+			// Currently, 'buf' is big-endian since we just copied directly.
+			// If your input is little-endian, you'd need to SwapEndianness here.
+			// But the original code calls SwapEndianness(input[start:end]),
+			// so let's maintain that logic.
+			// We'll handle the modulo after swapping endianness since mimc expects big-endian.
+			buf = SwapEndianness(buf)
+
+			x := new(big.Int).SetBytes(buf) // big-endian to big.Int
+			x.Mod(x, q)                     // modulo q
+
+			// Convert back to big-endian 32-byte array
+			modBuf := x.Bytes()
+			if len(modBuf) < h.BlockSize() {
+				pad := make([]byte, h.BlockSize()-len(modBuf))
+				modBuf = append(pad, modBuf...) // left-pad to get h.BlockSize() length
+			}
+
+			// Ensure big-endian format for Write:
+			// The MiMC expects big-endian. After modulo we have big-endian in modBuf.
+			// We do not need to SwapEndianness again since we've produced big-endian already.
+
+			if _, err := h.Write(modBuf); err != nil {
 				return nil, err
 			}
 		}
