@@ -89,3 +89,43 @@ func TestHashMoreThan32BytesMiMC(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(h), qt.Equals, 32)
 }
+
+func testHashBytesCollisionsOpt(c *qt.C, hashFunc HashFunction) {
+	// hash 2 different byte-arrays of 0s
+	h_a, err := hashFunc.Hash([]byte{0, 0})
+	c.Assert(err, qt.IsNil)
+	h_b, err := hashFunc.Hash([]byte{0, 0, 0, 0})
+	c.Assert(err, qt.IsNil)
+
+	// hash 2 different byte-arrays
+	h_c, err := hashFunc.Hash([]byte{1, 2, 3, 4})
+	c.Assert(err, qt.IsNil)
+	h_d, err := hashFunc.Hash([]byte{1, 2, 3, 4, 0, 0})
+	c.Assert(err, qt.IsNil)
+
+	// check that the outputs are different
+	c.Assert(h_a, qt.Not(qt.DeepEquals), h_b)
+	c.Assert(h_c, qt.Not(qt.DeepEquals), h_d)
+}
+
+func TestHashBytesCollisions(t *testing.T) {
+	c := qt.New(t)
+
+	hashFuncSha256 := &HashSha256{}
+	testHashBytesCollisionsOpt(c, hashFuncSha256)
+
+	hashFuncBlake2b := &HashBlake2b{}
+	testHashBytesCollisionsOpt(c, hashFuncBlake2b)
+
+	// next checks (Poseidon & MiMC) will collide, due how bytes are
+	// converted to field elements
+
+	hashFuncPoseidon := &HashPoseidon{}
+	testHashBytesCollisionsOpt(c, hashFuncPoseidon)
+
+	hashFuncMultiPoseidon := &HashMultiPoseidon{}
+	testHashBytesCollisionsOpt(c, hashFuncMultiPoseidon)
+
+	hashFuncMimc := &HashMiMC_BLS12_377{}
+	testHashBytesCollisionsOpt(c, hashFuncMimc)
+}
