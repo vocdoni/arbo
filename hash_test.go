@@ -83,6 +83,14 @@ func TestHashMoreThan32BytesMiMC(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(len(h), qt.Equals, 32)
 
+	// same byte array as b, but with an extra 0 element at the end
+	b2 := b
+	b2 = append(b2, 0)
+	h2, err := mimcbn254.Hash(b2)
+	c.Assert(err, qt.IsNil)
+	// h & h2 should be different, since b & b2 are different
+	c.Assert(h, qt.Not(qt.DeepEquals), h2)
+
 	// MiMC hash bls12377
 	mimcbls12377 := &HashMiMC_BLS12_377{}
 	h, err = mimcbls12377.Hash(b)
