@@ -5,11 +5,9 @@
 package arbo
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"math"
+	"math/big"
 	"runtime"
 	"sync"
 )
@@ -17,27 +15,27 @@ import (
 type node struct {
 	l    *node
 	r    *node
-	k    []byte
-	v    []byte
+	k    *big.Int
+	v    []*big.Int
 	path []bool
-	h    []byte
+	h    *big.Int
 }
 
 type params struct {
 	maxLevels    int
 	hashFunction HashFunction
-	emptyHash    []byte
+	emptyHash    *big.Int
 	dbg          *dbgStats
 }
 
 type kv struct {
 	pos     int // original position in the inputted array
 	keyPath []byte
-	k       []byte
-	v       []byte
+	k       *big.Int
+	v       []*big.Int
 }
 
-func keysValuesToKvs(maxLevels int, ks, vs [][]byte) ([]kv, []Invalid, error) {
+func keysValuesToKvs(maxLevels int, ks []*big.Int, vs [][]*big.Int) ([]kv, []Invalid, error) {
 	if len(ks) != len(vs) {
 		return nil, nil, fmt.Errorf("len(keys)!=len(values) (%d!=%d)",
 			len(ks), len(vs))
@@ -50,7 +48,7 @@ func keysValuesToKvs(maxLevels int, ks, vs [][]byte) ([]kv, []Invalid, error) {
 			invalids = append(invalids, Invalid{i, err})
 			continue
 		}
-		if err := checkKeyValueLen(ks[i], vs[i]); err != nil {
+		if err := checkKeyValueLen(ks[i], vs[i]...); err != nil {
 			invalids = append(invalids, Invalid{i, err})
 			continue
 		}
@@ -81,7 +79,7 @@ func newVT(maxLevels int, hash HashFunction) vt {
 		params: &params{
 			maxLevels:    maxLevels,
 			hashFunction: hash,
-			emptyHash:    make([]byte, hash.Len()), // empty
+			emptyHash:    zero, // empty
 		},
 	}
 }
@@ -91,12 +89,12 @@ func newVT(maxLevels int, hash HashFunction) vt {
 // computation of hashes of the nodes neither the storage of the key-values of
 // the tree into the db. After addBatch, vt.computeHashes should be called to
 // compute the hashes of all the nodes of the tree.
-func (t *vt) addBatch(ks, vs [][]byte) ([]Invalid, error) {
+func (t *vt) addBatch(ks []*big.Int, vs [][]*big.Int) ([]Invalid, error) {
 	nCPU := flp2(runtime.NumCPU())
 	if nCPU == 1 || len(ks) < nCPU {
 		var invalids []Invalid
 		for i := 0; i < len(ks); i++ {
-			if err := t.add(0, ks[i], vs[i]); err != nil {
+			if err := t.add(0, ks[i], vs[i]...); err != nil {
 				invalids = append(invalids, Invalid{i, err})
 			}
 		}
@@ -154,7 +152,7 @@ func (t *vt) addBatch(ks, vs [][]byte) ([]Invalid, error) {
 			// (until one is added)
 			inserted := -1
 			for j := 0; j < len(buckets[i]); j++ {
-				if err := t.add(0, buckets[i][j].k, buckets[i][j].v); err == nil {
+				if err := t.add(0, buckets[i][j].k, buckets[i][j].v...); err == nil {
 					inserted = j
 					break
 				}
@@ -188,7 +186,7 @@ func (t *vt) addBatch(ks, vs [][]byte) ([]Invalid, error) {
 			bucketVT.root = nodesAtL[cpu]
 			for j := 0; j < len(buckets[cpu]); j++ {
 				if err := bucketVT.add(l, buckets[cpu][j].k,
-					buckets[cpu][j].v); err != nil {
+					buckets[cpu][j].v...); err != nil {
 					invalidsInBucket[cpu] = append(invalidsInBucket[cpu],
 						Invalid{buckets[cpu][j].pos, err})
 				}
@@ -295,8 +293,8 @@ func upFromNodes(ns []*node) (*node, error) {
 }
 
 // add adds a key&value as a leaf in the VirtualTree
-func (t *vt) add(fromLvl int, k, v []byte) error {
-	leaf, err := newLeafNode(t.params, k, v)
+func (t *vt) add(fromLvl int, k *big.Int, v ...*big.Int) error {
+	leaf, err := newLeafNode(t.params, k, v...)
 	if err != nil {
 		return err
 	}
@@ -381,8 +379,8 @@ func (t *vt) computeHashes() ([][2][]byte, error) {
 	return pairs, nil
 }
 
-func newLeafNode(p *params, k, v []byte) (*node, error) {
-	if err := checkKeyValueLen(k, v); err != nil {
+func newLeafNode(p *params, k *big.Int, v ...*big.Int) (*node, error) {
+	if err := checkKeyValueLen(k, v...); err != nil {
 		return nil, err
 	}
 
@@ -454,10 +452,9 @@ func (n *node) add(p *params, currLvl int, leaf *node) error {
 			}
 		}
 	case vtLeaf:
-		if bytes.Equal(n.k, leaf.k) {
+		if n.k.Cmp(leaf.k) == 0 {
 			return fmt.Errorf("%s. Existing node: %s, trying to add node: %s",
-				ErrKeyAlreadyExists, hex.EncodeToString(n.k),
-				hex.EncodeToString(leaf.k))
+				ErrKeyAlreadyExists, n.k, leaf.k)
 		}
 
 		oldLeaf := &node{
@@ -579,12 +576,12 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 	switch t {
 	case vtLeaf:
 		p.dbg.incHash()
-		leafKey, leafValue, err := newLeafValue(p.hashFunction, n.k, n.v)
+		leafKey, leafValue, err := newLeafValue(p.hashFunction, n.k, n.v...)
 		if err != nil {
 			return pairs, err
 		}
 		n.h = leafKey
-		kv := [2][]byte{leafKey, leafValue}
+		kv := [2][]byte{leafKey.Bytes(), leafValue}
 		pairs = append(pairs, kv)
 	case vtMid:
 		if n.l != nil {
@@ -615,7 +612,7 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 			return nil, err
 		}
 		n.h = k
-		kv := [2][]byte{k, v}
+		kv := [2][]byte{k.Bytes(), v}
 		pairs = append(pairs, kv)
 	case vtEmpty:
 	default:
@@ -623,119 +620,4 @@ func (n *node) computeHashes(currLvl, maxLvl int, p *params, pairs [][2][]byte) 
 	}
 
 	return pairs, nil
-}
-
-//nolint:unused
-func (t *vt) graphviz(w io.Writer) error {
-	if _, err := fmt.Fprintf(w, `digraph hierarchy {
-node [fontname=Monospace,fontsize=10,shape=box]
-`); err != nil {
-		return err
-	}
-	if _, err := t.root.graphviz(w, t.params, 0); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "}\n"); err != nil {
-		return err
-	}
-	return nil
-}
-
-//nolint:unused
-func (n *node) graphviz(w io.Writer, p *params, nEmpties int) (int, error) {
-	if n == nil {
-		return nEmpties, nil
-	}
-
-	t := n.typ()
-	switch t {
-	case vtLeaf:
-		leafKey, _, err := newLeafValue(p.hashFunction, n.k, n.v)
-		if err != nil {
-			return nEmpties, err
-		}
-		if _, err := fmt.Fprintf(w, "\"%p\" [style=filled,label=\"%v\"];\n", n, hex.EncodeToString(leafKey[:nChars])); err != nil {
-			return nEmpties, err
-		}
-
-		k := n.k
-		v := n.v
-		if len(n.k) >= nChars {
-			k = n.k[:nChars]
-		}
-		if len(n.v) >= nChars {
-			v = n.v[:nChars]
-		}
-
-		if _, err := fmt.Fprintf(w, "\"%p\" -> {\"k:%v\\nv:%v\"}\n", n,
-			hex.EncodeToString(k),
-			hex.EncodeToString(v)); err != nil {
-			return nEmpties, err
-		}
-		if _, err := fmt.Fprintf(w, "\"k:%v\\nv:%v\" [style=dashed]\n",
-			hex.EncodeToString(k),
-			hex.EncodeToString(v)); err != nil {
-			return nEmpties, err
-		}
-	case vtMid:
-		if _, err := fmt.Fprintf(w, "\"%p\" [label=\"\"];\n", n); err != nil {
-			return nEmpties, err
-		}
-
-		lStr := fmt.Sprintf("%p", n.l)
-		rStr := fmt.Sprintf("%p", n.r)
-		eStr := ""
-		if n.l == nil {
-			lStr = fmt.Sprintf("empty%v", nEmpties)
-			eStr += fmt.Sprintf("\"%v\" [style=dashed,label=0];\n",
-				lStr)
-			nEmpties++
-		}
-		if n.r == nil {
-			rStr = fmt.Sprintf("empty%v", nEmpties)
-			eStr += fmt.Sprintf("\"%v\" [style=dashed,label=0];\n",
-				rStr)
-			nEmpties++
-		}
-		if _, err := fmt.Fprintf(w, "\"%p\" -> {\"%v\" \"%v\"}\n", n, lStr, rStr); err != nil {
-			return nEmpties, err
-		}
-		if _, err := fmt.Fprint(w, eStr); err != nil {
-			return nEmpties, err
-		}
-		nEmpties, err := n.l.graphviz(w, p, nEmpties)
-		if err != nil {
-			return nEmpties, err
-		}
-		nEmpties, err = n.r.graphviz(w, p, nEmpties)
-		if err != nil {
-			return nEmpties, err
-		}
-
-	case vtEmpty:
-	default:
-		return nEmpties, fmt.Errorf("ERR")
-	}
-
-	return nEmpties, nil
-}
-
-//nolint:unused
-func (t *vt) printGraphviz() error {
-	w := bytes.NewBufferString("")
-	if _, err := fmt.Fprintf(w,
-		"--------\nGraphviz:\n"); err != nil {
-		return err
-	}
-	err := t.graphviz(w)
-	if err != nil {
-		fmt.Println(w)
-		return err
-	}
-	if _, err := fmt.Fprintf(w,
-		"End of Graphviz --------\n"); err != nil {
-		return err
-	}
-	fmt.Println(w)
-	return nil
 }

@@ -2,6 +2,7 @@ package arbo
 
 import (
 	"encoding/json"
+	"math/big"
 )
 
 // CircomVerifierProof contains the needed data to check a Circom Verifier Proof
@@ -41,46 +42,59 @@ func (cvp CircomVerifierProof) MarshalJSON() ([]byte, error) {
 func siblingsToStringArray(s [][]byte) []string {
 	var r []string
 	for i := 0; i < len(s); i++ {
-		r = append(r, BytesToBigInt(s[i]).String())
+		si := new(big.Int).SetBytes(s[i])
+		r = append(r, si.String())
 	}
 	return r
 }
 
 // FillMissingEmptySiblings adds the empty values to the array of siblings for
 // the Tree number of max levels
-func (t *Tree) FillMissingEmptySiblings(s [][]byte) [][]byte {
-	for i := len(s); i < t.maxLevels; i++ {
-		s = append(s, emptyValue)
+func (t *Tree) FillMissingEmptySiblings(s []*big.Int) [][]byte {
+	res := [][]byte{}
+	for i := 0; i < t.maxLevels; i++ {
+		if i < len(s) {
+			res = append(res, s[i].Bytes())
+		} else {
+			res = append(res, emptyValue)
+		}
 	}
-	return s
+	return res
 }
 
 // GenerateCircomVerifierProof generates a CircomVerifierProof for a given key
 // in the Tree
-func (t *Tree) GenerateCircomVerifierProof(k []byte) (*CircomVerifierProof, error) {
+func (t *Tree) GenerateCircomVerifierProof(k *big.Int) (*CircomVerifierProof, error) {
 	kAux, v, siblings, existence, err := t.GenProof(k)
 	if err != nil && err != ErrKeyNotFound {
 		return nil, err
 	}
 	var cp CircomVerifierProof
-	cp.Root, err = t.Root()
+	root, err := t.Root()
 	if err != nil {
 		return nil, err
 	}
+	cp.Root = root.Bytes()
 	s, err := UnpackSiblings(t.hashFunction, siblings)
 	if err != nil {
 		return nil, err
 	}
 	cp.Siblings = t.FillMissingEmptySiblings(s)
 	if !existence {
-		cp.OldKey = kAux
-		cp.OldValue = v
+		cp.OldKey = kAux.Bytes()
+		cp.OldValue, err = WriteLeafValue(kAux, v...)
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		cp.OldKey = emptyValue
 		cp.OldValue = emptyValue
 	}
-	cp.Key = k
-	cp.Value = v
+	cp.Key = k.Bytes()
+	cp.Value, err = WriteLeafValue(k, v...)
+	if err != nil {
+		return nil, err
+	}
 	if existence {
 		cp.Fnc = 0 // inclusion
 	} else {

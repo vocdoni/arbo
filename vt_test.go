@@ -20,7 +20,7 @@ func testVirtualTree(c *qt.C, maxLevels int, keys, values [][]byte) {
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionSha256})
+		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 	for i := 0; i < len(keys); i++ {
 		err := tree.Add(keys[i], values[i])
@@ -28,7 +28,7 @@ func testVirtualTree(c *qt.C, maxLevels int, keys, values [][]byte) {
 	}
 
 	// virtual tree
-	vTree := newVT(maxLevels, HashFunctionSha256)
+	vTree := newVT(maxLevels, HashFunctionPoseidon)
 
 	c.Assert(vTree.root, qt.IsNil)
 
@@ -126,7 +126,7 @@ func TestVirtualTreeAddBatch(t *testing.T) {
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 	for i := 0; i < len(keys); i++ {
 		err := tree.Add(keys[i], values[i])
@@ -134,7 +134,7 @@ func TestVirtualTreeAddBatch(t *testing.T) {
 	}
 
 	// virtual tree
-	vTree := newVT(maxLevels, HashFunctionBlake2b)
+	vTree := newVT(maxLevels, HashFunctionPoseidon)
 
 	c.Assert(vTree.root, qt.IsNil)
 
@@ -180,8 +180,8 @@ func TestGetNodesAtLevel(t *testing.T) {
 	tree0 := vt{
 		params: &params{
 			maxLevels:    100,
-			hashFunction: HashFunctionBlake2b,
-			emptyHash:    make([]byte, HashFunctionBlake2b.Len()),
+			hashFunction: HashFunctionPoseidon,
+			emptyHash:    make([]byte, HashFunctionPoseidon.Len()),
 		},
 		root: nil,
 	}
@@ -189,8 +189,8 @@ func TestGetNodesAtLevel(t *testing.T) {
 	tree1 := vt{
 		params: &params{
 			maxLevels:    100,
-			hashFunction: HashFunctionBlake2b,
-			emptyHash:    make([]byte, HashFunctionBlake2b.Len()),
+			hashFunction: HashFunctionPoseidon,
+			emptyHash:    make([]byte, HashFunctionPoseidon.Len()),
 		},
 		root: &node{
 			l: &node{
@@ -220,8 +220,8 @@ func TestGetNodesAtLevel(t *testing.T) {
 	tree2 := vt{
 		params: &params{
 			maxLevels:    100,
-			hashFunction: HashFunctionBlake2b,
-			emptyHash:    make([]byte, HashFunctionBlake2b.Len()),
+			hashFunction: HashFunctionPoseidon,
+			emptyHash:    make([]byte, HashFunctionPoseidon.Len()),
 		},
 		root: &node{
 			l: nil,
@@ -254,8 +254,8 @@ func TestGetNodesAtLevel(t *testing.T) {
 	tree3 := vt{
 		params: &params{
 			maxLevels:    100,
-			hashFunction: HashFunctionBlake2b,
-			emptyHash:    make([]byte, HashFunctionBlake2b.Len()),
+			hashFunction: HashFunctionPoseidon,
+			emptyHash:    make([]byte, HashFunctionPoseidon.Len()),
 		},
 		root: &node{
 			l: nil,

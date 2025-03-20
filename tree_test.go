@@ -67,7 +67,7 @@ func TestAddTestVectors(t *testing.T) {
 		"59481735341404520835410489183267411392292882901306595567679529387376287440550",
 		"20573794434149960984975763118181266662429997821552560184909083010514790081771",
 	}
-	testAdd(c, HashFunctionSha256, testVectorsSha256)
+	testAdd(c, HashFunctionPoseidon, testVectorsSha256)
 }
 
 func testAdd(c *qt.C, hashFunc HashFunction, testVectors []string) {
@@ -804,7 +804,7 @@ func TestKeyLen(t *testing.T) {
 	// maxLevels is 100, keyPath length = ceil(maxLevels/8) = 13
 	maxLevels := 100
 	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 
 	// expect no errors when adding a key of only 4 bytes (when the
@@ -837,7 +837,7 @@ func TestKeyLen(t *testing.T) {
 	database, err = pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err = NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 
 	maxKeyLen := int(math.Ceil(float64(maxLevels) / float64(8))) //nolint:gomnd
@@ -908,7 +908,7 @@ func TestKeyLenBiggerThan32(t *testing.T) {
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
 	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+		HashFunction: HashFunctionPoseidon})
 	c.Assert(err, qt.IsNil)
 
 	bLen := 33
@@ -942,7 +942,7 @@ func BenchmarkAdd(b *testing.B) {
 		benchmarkAdd(b, HashFunctionPoseidon, ks, vs)
 	})
 	b.Run("Sha256", func(b *testing.B) {
-		benchmarkAdd(b, HashFunctionSha256, ks, vs)
+		benchmarkAdd(b, HashFunctionPoseidon, ks, vs)
 	})
 }
 
