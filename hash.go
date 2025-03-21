@@ -64,7 +64,11 @@ func (f HashPoseidon) Len() int {
 // expects the byte arrays to be little-endian representations of big.Int
 // values.
 func (f HashPoseidon) Hash(b ...*big.Int) (*big.Int, error) {
-	return poseidon.Hash(b)
+	var toHash []*big.Int
+	for _, i := range b {
+		toHash = append(toHash, BigToFF(BN254BaseField, BytesToBigInt(i.Bytes())))
+	}
+	return poseidon.Hash(toHash)
 }
 
 type HashMiMC7 struct{}

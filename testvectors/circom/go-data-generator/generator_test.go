@@ -8,16 +8,16 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/vocdoni/arbo"
-	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/pebbledb"
+	"github.com/vocdoni/arbo/memdb"
 )
 
 func TestGenerator(t *testing.T) {
 	c := qt.New(t)
-	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
-	tree, err := arbo.NewTree(arbo.Config{Database: database, MaxLevels: 4,
-		HashFunction: arbo.HashFunctionPoseidon})
+	tree, err := arbo.NewTree(arbo.Config{
+		Database:     memdb.New(),
+		MaxLevels:    4,
+		HashFunction: arbo.HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	testVector := [][]int64{
@@ -26,17 +26,12 @@ func TestGenerator(t *testing.T) {
 		{3, 33},
 		{4, 44},
 	}
-	bLen := 1
-	for i := 0; i < len(testVector); i++ {
-		k := arbo.BigIntToBytes(bLen, big.NewInt(testVector[i][0]))
-		v := arbo.BigIntToBytes(bLen, big.NewInt(testVector[i][1]))
-		if err := tree.Add(k, v); err != nil {
-			t.Fatal(err)
-		}
+	for i := range testVector {
+		c.Assert(tree.Add(big.NewInt(testVector[i][0]), big.NewInt(testVector[i][1])), qt.IsNil)
 	}
 
 	// proof of existence
-	k := arbo.BigIntToBytes(bLen, big.NewInt(int64(2)))
+	k := big.NewInt(int64(2))
 	cvp, err := tree.GenerateCircomVerifierProof(k)
 	c.Assert(err, qt.IsNil)
 	jCvp, err := json.Marshal(cvp)
@@ -46,7 +41,7 @@ func TestGenerator(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// proof of non-existence
-	k = arbo.BigIntToBytes(bLen, big.NewInt(int64(5)))
+	k = big.NewInt(int64(5))
 	cvp, err = tree.GenerateCircomVerifierProof(k)
 	c.Assert(err, qt.IsNil)
 	jCvp, err = json.Marshal(cvp)
