@@ -18,32 +18,30 @@ import (
 // 	c.Check(rootBI.String(), qt.Equals, expected)
 // }
 
-// func TestDBTx(t *testing.T) {
-// 	c := qt.New(t)
+func TestDBTx(t *testing.T) {
+	c := qt.New(t)
 
-// 	dbBadger, err := pebbledb.New(db.Options{Path: c.TempDir()})
-// 	c.Assert(err, qt.IsNil)
-// 	testDBTx(c, dbBadger)
+	testDBTx(c, memdb.New())
 
-// 	dbPebble, err := pebbledb.New(db.Options{Path: c.TempDir()})
-// 	c.Assert(err, qt.IsNil)
-// 	testDBTx(c, dbPebble)
-// }
+	dbPebble, err := pebbledb.New(db.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	testDBTx(c, dbPebble)
+}
 
-// func testDBTx(c *qt.C, database db.Database) {
-// 	wTx := database.WriteTx()
-// 	defer wTx.Discard()
+func testDBTx(c *qt.C, database db.Database) {
+	wTx := database.WriteTx()
+	defer wTx.Discard()
 
-// 	_, err := wTx.Get([]byte("a"))
-// 	c.Assert(err, qt.Equals, db.ErrKeyNotFound)
+	_, err := wTx.Get([]byte("a"))
+	c.Assert(err, qt.Equals, db.ErrKeyNotFound)
 
-// 	err = wTx.Set([]byte("a"), []byte("b"))
-// 	c.Assert(err, qt.IsNil)
+	err = wTx.Set([]byte("a"), []byte("b"))
+	c.Assert(err, qt.IsNil)
 
-// 	v, err := wTx.Get([]byte("a"))
-// 	c.Assert(err, qt.IsNil)
-// 	c.Assert(v, qt.DeepEquals, []byte("b"))
-// }
+	v, err := wTx.Get([]byte("a"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(v, qt.DeepEquals, []byte("b"))
+}
 
 // func TestAddTestVectors(t *testing.T) {
 // 	c := qt.New(t)
@@ -321,35 +319,35 @@ import (
 // 	c.Check(gettedValue, qt.DeepEquals, BigIntToBytes(bLen, big.NewInt(int64(7*2))))
 // }
 
-// func TestBitmapBytes(t *testing.T) {
-// 	c := qt.New(t)
+func TestBitmapBytes(t *testing.T) {
+	c := qt.New(t)
 
-// 	b := []byte{15}
-// 	bits := bytesToBitmap(b)
-// 	c.Assert(bits, qt.DeepEquals, []bool{true, true, true, true,
-// 		false, false, false, false})
-// 	b2 := bitmapToBytes(bits)
-// 	c.Assert(b2, qt.DeepEquals, b)
+	b := []byte{15}
+	bits := bytesToBitmap(b)
+	c.Assert(bits, qt.DeepEquals, []bool{true, true, true, true,
+		false, false, false, false})
+	b2 := bitmapToBytes(bits)
+	c.Assert(b2, qt.DeepEquals, b)
 
-// 	b = []byte{0, 15, 50}
-// 	bits = bytesToBitmap(b)
-// 	c.Assert(bits, qt.DeepEquals, []bool{false, false, false,
-// 		false, false, false, false, false, true, true, true, true,
-// 		false, false, false, false, false, true, false, false, true,
-// 		true, false, false})
-// 	b2 = bitmapToBytes(bits)
-// 	c.Assert(b2, qt.DeepEquals, b)
+	b = []byte{0, 15, 50}
+	bits = bytesToBitmap(b)
+	c.Assert(bits, qt.DeepEquals, []bool{false, false, false,
+		false, false, false, false, false, true, true, true, true,
+		false, false, false, false, false, true, false, false, true,
+		true, false, false})
+	b2 = bitmapToBytes(bits)
+	c.Assert(b2, qt.DeepEquals, b)
 
-// 	b = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
-// 	bits = bytesToBitmap(b)
-// 	b2 = bitmapToBytes(bits)
-// 	c.Assert(b2, qt.DeepEquals, b)
+	b = []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
+	bits = bytesToBitmap(b)
+	b2 = bitmapToBytes(bits)
+	c.Assert(b2, qt.DeepEquals, b)
 
-// 	b = []byte("testbytes")
-// 	bits = bytesToBitmap(b)
-// 	b2 = bitmapToBytes(bits)
-// 	c.Assert(b2, qt.DeepEquals, b)
-// }
+	b = []byte("testbytes")
+	bits = bytesToBitmap(b)
+	b2 = bitmapToBytes(bits)
+	c.Assert(b2, qt.DeepEquals, b)
+}
 
 // func TestPackAndUnpackSiblings(t *testing.T) {
 // 	c := qt.New(t)
@@ -423,19 +421,18 @@ import (
 
 func TestGenProofAndVerify(t *testing.T) {
 	c := qt.New(t)
-	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database:     memdb.New(),
+		MaxLevels:    256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 	defer tree.db.Close() //nolint:errcheck
 
 	for i := range 100 {
 		k := big.NewInt(int64(i))
 		v := big.NewInt(int64(i * 2))
-		if err := tree.Add(k, v); err != nil {
-			t.Fatal(err)
-		}
+		c.Assert(tree.Add(k, v), qt.IsNil)
 	}
 
 	k := big.NewInt(int64(7))

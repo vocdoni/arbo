@@ -872,9 +872,9 @@ func (t *Tree) newIntermediate(l, r *big.Int) (*big.Int, []byte, error) {
 func newIntermediate(hashFunc HashFunction, l, r *big.Int) (*big.Int, []byte, error) {
 	b := make([]byte, PrefixValueLen+hashFunc.Len()*2)
 	b[0] = PrefixValueIntermediate
-	// if len(l) > maxUint8 {
-	// 	return nil, nil, fmt.Errorf("newIntermediate: len(l) > %v", maxUint8)
-	// }
+	if len(l.Bytes()) > maxUint8 {
+		return nil, nil, fmt.Errorf("newIntermediate: len(l) > %v", maxUint8)
+	}
 	b[1] = byte(len(l.Bytes()))
 	copy(b[PrefixValueLen:PrefixValueLen+hashFunc.Len()], l.Bytes())
 	copy(b[PrefixValueLen+hashFunc.Len():], r.Bytes())
