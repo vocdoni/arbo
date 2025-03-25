@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"go.vocdoni.io/dvote/db"
+	"go.vocdoni.io/dvote/db/prefixeddb"
 )
 
 const (
@@ -55,9 +56,11 @@ var (
 	// in disk.
 	DefaultThresholdNLeafs = 65536
 
-	dbKeyRoot   = []byte("root")
-	dbKeyNLeafs = []byte("nleafs")
-	emptyValue  = []byte{0}
+	dbTreePrefix   = []byte("tree")
+	dbValuesPrefix = []byte("values")
+	dbKeyRoot      = []byte("root")
+	dbKeyNLeafs    = []byte("nleafs")
+	emptyValue     = []byte{0}
 
 	// ErrKeyNotFound is used when a key is not found in the db neither in
 	// the current db Batch.
@@ -88,7 +91,8 @@ var (
 type Tree struct {
 	sync.Mutex
 
-	db        db.Database
+	treedb    db.Database
+	valuesdb  db.Database
 	maxLevels int
 	// thresholdNLeafs defines the threshold number of leafs in the tree
 	// that determines if AddBatch will work in memory or in disk.  It is
@@ -138,9 +142,16 @@ func NewTreeWithTx(wTx db.WriteTx, cfg Config) (*Tree, error) {
 	if cfg.ThresholdNLeafs == 0 {
 		cfg.ThresholdNLeafs = DefaultThresholdNLeafs
 	}
-	t := Tree{db: cfg.Database, maxLevels: cfg.MaxLevels,
-		thresholdNLeafs: cfg.ThresholdNLeafs, hashFunction: cfg.HashFunction}
-	t.emptyHash = make([]byte, t.hashFunction.Len()) // empty
+	treedb := prefixeddb.NewPrefixedDatabase(cfg.Database, dbTreePrefix)
+	valuesdb := prefixeddb.NewPrefixedDatabase(cfg.Database, dbValuesPrefix)
+	t := Tree{
+		treedb:          treedb,
+		valuesdb:        valuesdb,
+		maxLevels:       cfg.MaxLevels,
+		thresholdNLeafs: cfg.ThresholdNLeafs,
+		hashFunction:    cfg.HashFunction,
+		emptyHash:       make([]byte, cfg.HashFunction.Len()),
+	}
 
 	_, err := wTx.Get(dbKeyRoot)
 	if err == db.ErrKeyNotFound {
@@ -160,7 +171,7 @@ func NewTreeWithTx(wTx db.WriteTx, cfg Config) (*Tree, error) {
 
 // Root returns the root of the Tree
 func (t *Tree) Root() ([]byte, error) {
-	return t.RootWithTx(t.db)
+	return t.RootWithTx(t.treedb)
 }
 
 // RootWithTx returns the root of the Tree using the given db.ReadTx
@@ -201,7 +212,7 @@ type Invalid struct {
 // the indexes of the keys failed to add. Supports empty values as input
 // parameters, which is equivalent to 0 valued byte array.
 func (t *Tree) AddBatch(keys, values [][]byte) ([]Invalid, error) {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	invalids, err := t.AddBatchWithTx(wTx, keys, values)
@@ -312,7 +323,7 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	invalidsInBucket := make([][]Invalid, nCPU)
 	txs := make([]db.WriteTx, nCPU)
 	for i := 0; i < nCPU; i++ {
-		txs[i] = t.db.WriteTx()
+		txs[i] = t.treedb.WriteTx()
 		err := txs[i].Apply(wTx)
 		if err != nil {
 			return nil, err
@@ -493,7 +504,7 @@ func (t *Tree) loadVT() (vt, error) {
 	vt := newVT(t.maxLevels, t.hashFunction)
 	vt.params.dbg = t.dbg
 	var callbackErr error
-	err := t.IterateWithStopWithTx(t.db, nil, func(_ int, k, v []byte) bool {
+	err := t.IterateWithStopWithTx(t.treedb, nil, func(_ int, k, v []byte) bool {
 		if v[0] != PrefixValueLeaf {
 			return false
 		}
@@ -515,7 +526,7 @@ func (t *Tree) loadVT() (vt, error) {
 // *big.Int, is expected that are represented by a Little-Endian byte array
 // (for circom compatibility).
 func (t *Tree) Add(k, v []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	if err := t.AddWithTx(wTx, k, v); err != nil {
@@ -860,7 +871,7 @@ func getPath(numLevels int, k []byte) []bool {
 // Update updates the value for a given existing key. If the given key does not
 // exist, returns an error.
 func (t *Tree) Update(k, v []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	if err := t.UpdateWithTx(wTx, k, v); err != nil {
@@ -930,7 +941,7 @@ func (t *Tree) UpdateWithTx(wTx db.WriteTx, k, v []byte) error {
 // returned, together with the packed siblings of the proof, and a boolean
 // parameter that indicates if the proof is of existence (true) or not (false).
 func (t *Tree) GenProof(k []byte) ([]byte, []byte, []byte, bool, error) {
-	return t.GenProofWithTx(t.db, k)
+	return t.GenProofWithTx(t.treedb, k)
 }
 
 // GenProofWithTx does the same than the GenProof method, but allowing to pass
@@ -1062,7 +1073,7 @@ func bytesToBitmap(b []byte) []bool {
 // will be placed the data found in the tree in the leaf that was on the path
 // going to the input key.
 func (t *Tree) Get(k []byte) ([]byte, []byte, error) {
-	return t.GetWithTx(t.db, k)
+	return t.GetWithTx(t.treedb, k)
 }
 
 // GetWithTx does the same than the Get method, but allowing to pass the
@@ -1151,7 +1162,7 @@ func (t *Tree) setNLeafs(wTx db.WriteTx, nLeafs int) error {
 
 // GetNLeafs returns the number of Leafs of the Tree.
 func (t *Tree) GetNLeafs() (int, error) {
-	return t.GetNLeafsWithTx(t.db)
+	return t.GetNLeafsWithTx(t.treedb)
 }
 
 // GetNLeafsWithTx does the same than the GetNLeafs method, but allowing to
@@ -1167,7 +1178,7 @@ func (t *Tree) GetNLeafsWithTx(rTx db.Reader) (int, error) {
 
 // SetRoot sets the root to the given root
 func (t *Tree) SetRoot(root []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	if err := t.SetRootWithTx(wTx, root); err != nil {
@@ -1209,7 +1220,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 			return nil, err
 		}
 	}
-	rTx := t.db
+	rTx := t.treedb
 	// check that the root exists in the db
 	if !bytes.Equal(fromRoot, t.emptyHash) {
 		if _, err := rTx.Get(fromRoot); err == ErrKeyNotFound {
@@ -1222,7 +1233,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 	}
 
 	return &Tree{
-		db:           t.db,
+		treedb:       t.treedb,
 		maxLevels:    t.maxLevels,
 		snapshotRoot: fromRoot,
 		emptyHash:    t.emptyHash,
@@ -1234,7 +1245,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 // Iterate iterates through the full Tree, executing the given function on each
 // node of the Tree.
 func (t *Tree) Iterate(fromRoot []byte, f func([]byte, []byte)) error {
-	return t.IterateWithTx(t.db, fromRoot, f)
+	return t.IterateWithTx(t.treedb, fromRoot, f)
 }
 
 // IterateWithTx does the same than the Iterate method, but allowing to pass
@@ -1258,12 +1269,12 @@ func (t *Tree) IterateWithStop(fromRoot []byte, f func(int, []byte, []byte) bool
 	// allow to define which root to use
 	if fromRoot == nil {
 		var err error
-		fromRoot, err = t.RootWithTx(t.db)
+		fromRoot, err = t.RootWithTx(t.treedb)
 		if err != nil {
 			return err
 		}
 	}
-	return t.iterWithStop(t.db, fromRoot, 0, f)
+	return t.iterWithStop(t.treedb, fromRoot, 0, f)
 }
 
 // IterateWithStopWithTx does the same than the IterateWithStop method, but
@@ -1470,14 +1481,14 @@ node [fontname=Monospace,fontsize=10,shape=box]
 	}
 	if fromRoot == nil {
 		var err error
-		fromRoot, err = t.RootWithTx(t.db)
+		fromRoot, err = t.RootWithTx(t.treedb)
 		if err != nil {
 			return err
 		}
 	}
 
 	nEmpties := 0
-	err := t.iterWithStop(t.db, fromRoot, 0, func(currLvl int, k, v []byte) bool {
+	err := t.iterWithStop(t.treedb, fromRoot, 0, func(currLvl int, k, v []byte) bool {
 		if currLvl == untilLvl {
 			return true // to stop the iter from going down
 		}
@@ -1575,3 +1586,7 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 // TODO circom proofs
 // TODO data structure for proofs (including root, key, value, siblings,
 // hashFunction) + method to verify that data structure
+
+func (t *Tree) MaxKeyLen() int {
+	return min(int(math.Ceil(float64(t.maxLevels)/8)), t.HashFunction().Len())
+}
