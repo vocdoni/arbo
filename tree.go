@@ -22,6 +22,8 @@ import (
 	"sync"
 
 	"go.vocdoni.io/dvote/db"
+	"go.vocdoni.io/dvote/db/prefixeddb"
+	"slices"
 )
 
 const (
@@ -54,6 +56,9 @@ var (
 	// is defined when calling NewTree, and if set to 0 it will work always
 	// in disk.
 	DefaultThresholdNLeafs = 65536
+
+	dbTreePrefix   = []byte("treedb")
+	dbValuesPrefix = []byte("valuesdb")
 
 	dbKeyRoot   = []byte("root")
 	dbKeyNLeafs = []byte("nleafs")
@@ -88,7 +93,8 @@ var (
 type Tree struct {
 	sync.Mutex
 
-	db        db.Database
+	treedb    db.Database
+	valuesdb  db.Database
 	maxLevels int
 	// thresholdNLeafs defines the threshold number of leafs in the tree
 	// that determines if AddBatch will work in memory or in disk.  It is
@@ -116,7 +122,7 @@ type Config struct {
 // NewTree returns a new Tree, if there is a Tree still in the given database, it
 // will load it.
 func NewTree(cfg Config) (*Tree, error) {
-	wTx := cfg.Database.WriteTx()
+	wTx := prefixeddb.NewPrefixedWriteTx(cfg.Database.WriteTx(), dbTreePrefix)
 	defer wTx.Discard()
 
 	t, err := NewTreeWithTx(wTx, cfg)
@@ -138,12 +144,16 @@ func NewTreeWithTx(wTx db.WriteTx, cfg Config) (*Tree, error) {
 	if cfg.ThresholdNLeafs == 0 {
 		cfg.ThresholdNLeafs = DefaultThresholdNLeafs
 	}
-	t := Tree{db: cfg.Database, maxLevels: cfg.MaxLevels,
-		thresholdNLeafs: cfg.ThresholdNLeafs, hashFunction: cfg.HashFunction}
-	t.emptyHash = make([]byte, t.hashFunction.Len()) // empty
+	t := Tree{
+		treedb:          prefixeddb.NewPrefixedDatabase(cfg.Database, dbTreePrefix),
+		valuesdb:        prefixeddb.NewPrefixedDatabase(cfg.Database, dbValuesPrefix),
+		maxLevels:       cfg.MaxLevels,
+		thresholdNLeafs: cfg.ThresholdNLeafs,
+		hashFunction:    cfg.HashFunction,
+		emptyHash:       make([]byte, cfg.HashFunction.Len()), // empty
+	}
 
-	_, err := wTx.Get(dbKeyRoot)
-	if err == db.ErrKeyNotFound {
+	if _, err := wTx.Get(dbKeyRoot); err == db.ErrKeyNotFound {
 		// store new root 0 (empty)
 		if err = wTx.Set(dbKeyRoot, t.emptyHash); err != nil {
 			return nil, err
@@ -160,7 +170,7 @@ func NewTreeWithTx(wTx db.WriteTx, cfg Config) (*Tree, error) {
 
 // Root returns the root of the Tree
 func (t *Tree) Root() ([]byte, error) {
-	return t.RootWithTx(t.db)
+	return t.RootWithTx(t.treedb)
 }
 
 // RootWithTx returns the root of the Tree using the given db.ReadTx
@@ -201,7 +211,7 @@ type Invalid struct {
 // the indexes of the keys failed to add. Supports empty values as input
 // parameters, which is equivalent to 0 valued byte array.
 func (t *Tree) AddBatch(keys, values [][]byte) ([]Invalid, error) {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	invalids, err := t.AddBatchWithTx(wTx, keys, values)
@@ -221,7 +231,6 @@ func (t *Tree) AddBatchWithTx(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	if !t.editable() {
 		return nil, ErrSnapshotNotEditable
 	}
-
 	e := []byte{}
 	// equal the number of keys & values
 	if len(keys) > len(values) {
@@ -233,7 +242,6 @@ func (t *Tree) AddBatchWithTx(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 		// crop extra values
 		values = values[:len(keys)]
 	}
-
 	nLeafs, err := t.GetNLeafsWithTx(wTx)
 	if err != nil {
 		return nil, err
@@ -248,26 +256,25 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	nCPU := flp2(runtime.NumCPU())
 	if nCPU == 1 || len(keys) < nCPU {
 		var invalids []Invalid
-		for i := 0; i < len(keys); i++ {
+		for i := range keys {
 			if err := t.addWithTx(wTx, keys[i], values[i]); err != nil {
 				invalids = append(invalids, Invalid{i, err})
 			}
 		}
 		return invalids, nil
 	}
-
+	// split keys and values in buckets to add them in parallel by CPU
 	kvs, invalids, err := keysValuesToKvs(t.maxLevels, keys, values)
 	if err != nil {
 		return nil, err
 	}
-
 	buckets := splitInBuckets(kvs, nCPU)
-
+	// get the root to start adding the keys
 	root, err := t.RootWithTx(wTx)
 	if err != nil {
 		return nil, err
 	}
-
+	// get the subRoots at level l+1
 	l := int(math.Log2(float64(nCPU)))
 	subRoots, err := t.getSubRootsAtLevel(wTx, root, l+1)
 	if err != nil {
@@ -277,12 +284,12 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 		// Already populated Tree but Unbalanced.
 
 		// add one key at each bucket, and then continue with the flow
-		for i := 0; i < len(buckets); i++ {
+		for i := range buckets {
 			// add one leaf of the bucket, if there is an error when
 			// adding the k-v, try to add the next one of the bucket
 			// (until one is added)
 			inserted := -1
-			for j := 0; j < len(buckets[i]); j++ {
+			for j := range buckets[i] {
 				if newRoot, err := t.add(wTx, root, 0,
 					buckets[i][j].k, buckets[i][j].v); err == nil {
 					inserted = j
@@ -290,10 +297,9 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 					break
 				}
 			}
-
 			// remove the inserted element from buckets[i]
 			if inserted != -1 {
-				buckets[i] = append(buckets[i][:inserted], buckets[i][inserted+1:]...)
+				buckets[i] = slices.Delete(buckets[i], inserted, inserted+1)
 			}
 		}
 		subRoots, err = t.getSubRootsAtLevel(wTx, root, l+1)
@@ -311,8 +317,8 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 
 	invalidsInBucket := make([][]Invalid, nCPU)
 	txs := make([]db.WriteTx, nCPU)
-	for i := 0; i < nCPU; i++ {
-		txs[i] = t.db.WriteTx()
+	for i := range nCPU {
+		txs[i] = t.treedb.WriteTx()
 		err := txs[i].Apply(wTx)
 		if err != nil {
 			return nil, err
@@ -321,12 +327,12 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 
 	var wg sync.WaitGroup
 	wg.Add(nCPU)
-	for i := 0; i < nCPU; i++ {
+	for i := range nCPU {
 		go func(cpu int) {
 			// use different wTx for each cpu, after once all
 			// are done, iter over the cpuWTxs and copy their
 			// content into the main wTx
-			for j := 0; j < len(buckets[cpu]); j++ {
+			for j := range buckets[cpu] {
 				newSubRoot, err := t.add(txs[cpu], subRoots[cpu],
 					l, buckets[cpu][j].k, buckets[cpu][j].v)
 				if err != nil {
@@ -341,33 +347,27 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 		}(i)
 	}
 	wg.Wait()
-
-	for i := 0; i < nCPU; i++ {
+	for i := range nCPU {
 		if err := wTx.Apply(txs[i]); err != nil {
 			return nil, err
 		}
 		txs[i].Discard()
 	}
-
-	for i := 0; i < len(invalidsInBucket); i++ {
+	for i := range invalidsInBucket {
 		invalids = append(invalids, invalidsInBucket[i]...)
 	}
-
 	newRoot, err := t.upFromSubRoots(wTx, subRoots)
 	if err != nil {
 		return nil, err
 	}
-
 	// update dbKeyNLeafs
 	if err := t.SetRootWithTx(wTx, newRoot); err != nil {
 		return nil, err
 	}
-
 	// update nLeafs
 	if err := t.incNLeafs(wTx, len(keys)-len(invalids)); err != nil {
 		return nil, err
 	}
-
 	return invalids, nil
 }
 
@@ -412,7 +412,6 @@ func (t *Tree) upFromSubRoots(wTx db.WriteTx, subRoots [][]byte) ([]byte, error)
 			newSubRoots = append(newSubRoots, subRoots[i+1])
 			continue
 		}
-
 		k, v, err := t.newIntermediate(subRoots[i], subRoots[i+1])
 		if err != nil {
 			return nil, err
@@ -430,7 +429,6 @@ func (t *Tree) upFromSubRoots(wTx db.WriteTx, subRoots [][]byte) ([]byte, error)
 func (t *Tree) getSubRootsAtLevel(rTx db.Reader, root []byte, l int) ([][]byte, error) {
 	// go at level l and return each node key, where each node key is the
 	// subRoot of the subTree that starts there
-
 	var subRoots [][]byte
 	err := t.iterWithStop(rTx, root, 0, func(currLvl int, k, v []byte) bool {
 		if currLvl == l && !bytes.Equal(k, t.emptyHash) {
@@ -441,7 +439,6 @@ func (t *Tree) getSubRootsAtLevel(rTx db.Reader, root []byte, l int) ([][]byte, 
 		}
 		return false
 	})
-
 	return subRoots, err
 }
 
@@ -450,12 +447,10 @@ func (t *Tree) addBatchInMemory(wTx db.WriteTx, keys, values [][]byte) ([]Invali
 	if err != nil {
 		return nil, err
 	}
-
 	invalids, err := vt.addBatch(keys, values)
 	if err != nil {
 		return nil, err
 	}
-
 	// once the VirtualTree is build, compute the hashes
 	pairs, err := vt.computeHashes()
 	if err != nil {
@@ -464,26 +459,22 @@ func (t *Tree) addBatchInMemory(wTx db.WriteTx, keys, values [][]byte) ([]Invali
 		// nothing stored in the db and the error is returned
 		return nil, err
 	}
-
 	// store pairs in db
-	for i := 0; i < len(pairs); i++ {
+	for i := range pairs {
 		if err := wTx.Set(pairs[i][0], pairs[i][1]); err != nil {
 			return nil, err
 		}
 	}
-
 	// store root (from the vt) to db
 	if vt.root != nil {
 		if err := wTx.Set(dbKeyRoot, vt.root.h); err != nil {
 			return nil, err
 		}
 	}
-
 	// update nLeafs
 	if err := t.incNLeafs(wTx, len(keys)-len(invalids)); err != nil {
 		return nil, err
 	}
-
 	return invalids, nil
 }
 
@@ -493,7 +484,7 @@ func (t *Tree) loadVT() (vt, error) {
 	vt := newVT(t.maxLevels, t.hashFunction)
 	vt.params.dbg = t.dbg
 	var callbackErr error
-	err := t.IterateWithStopWithTx(t.db, nil, func(_ int, k, v []byte) bool {
+	err := t.IterateWithStopWithTx(t.treedb, nil, func(_ int, k, v []byte) bool {
 		if v[0] != PrefixValueLeaf {
 			return false
 		}
@@ -515,7 +506,7 @@ func (t *Tree) loadVT() (vt, error) {
 // *big.Int, is expected that are represented by a Little-Endian byte array
 // (for circom compatibility).
 func (t *Tree) Add(k, v []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	if err := t.AddWithTx(wTx, k, v); err != nil {
@@ -561,13 +552,19 @@ func (t *Tree) addWithTx(wTx db.WriteTx, k, v []byte) error {
 	return nil
 }
 
+// keyLenByLevels returns the key length in bytes that can be used in the tree
+// with maxLevels levels. The key length is calculated as the ceil(maxLevels/8).
+func keyLenByLevels(maxLevels int) int {
+	return int(math.Ceil(float64(maxLevels) / float64(8)))
+}
+
 // keyPathFromKey returns the keyPath and checks that the key is not bigger
 // than maximum key length for the tree maxLevels size.
 // This is because if the key bits length is bigger than the maxLevels of the
 // tree, two different keys that their difference is at the end, will collision
 // in the same leaf of the tree (at the max depth).
 func keyPathFromKey(maxLevels int, k []byte) ([]byte, error) {
-	maxKeyLen := int(math.Ceil(float64(maxLevels) / float64(8))) //nolint:gomnd
+	maxKeyLen := keyLenByLevels(maxLevels) //nolint:gomnd
 	if len(k) > maxKeyLen {
 		return nil, fmt.Errorf("len(k) can not be bigger than ceil(maxLevels/8), where"+
 			" len(k): %d, maxLevels: %d, max key len=ceil(maxLevels/8): %d. Might need"+
@@ -718,10 +715,8 @@ func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
 	if currLvl > t.maxLevels-1 {
 		return nil, ErrMaxVirtualLevel
 	}
-
 	if oldPath[currLvl] == newPath[currLvl] {
 		siblings = append(siblings, t.emptyHash)
-
 		siblings, err = t.downVirtually(siblings, oldKey, newKey, oldPath, newPath, currLvl+1)
 		if err != nil {
 			return nil, err
@@ -730,7 +725,6 @@ func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
 	}
 	// reached the divergence
 	siblings = append(siblings, oldKey)
-
 	return siblings, nil
 }
 
@@ -754,12 +748,10 @@ func (t *Tree) up(wTx db.WriteTx, key []byte, siblings [][]byte, path []bool,
 	if err = wTx.Set(k, v); err != nil {
 		return nil, err
 	}
-
 	if currLvl == 0 {
 		// reached the root
 		return k, nil
 	}
-
 	return t.up(wTx, k, siblings, path, currLvl-1, toLvl)
 }
 
@@ -795,7 +787,6 @@ func ReadLeafValue(b []byte) ([]byte, []byte) {
 	if len(b) < PrefixValueLen {
 		return []byte{}, []byte{}
 	}
-
 	kLen := b[1]
 	if len(b) < PrefixValueLen+int(kLen) {
 		return []byte{}, []byte{}
@@ -825,12 +816,10 @@ func newIntermediate(hashFunc HashFunction, l, r []byte) ([]byte, []byte, error)
 	b[1] = byte(len(l))
 	copy(b[PrefixValueLen:PrefixValueLen+hashFunc.Len()], l)
 	copy(b[PrefixValueLen+hashFunc.Len():], r)
-
 	key, err := hashFunc.Hash(l, r)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	return key, b, nil
 }
 
@@ -839,7 +828,6 @@ func ReadIntermediateChilds(b []byte) ([]byte, []byte) {
 	if len(b) < PrefixValueLen {
 		return []byte{}, []byte{}
 	}
-
 	lLen := b[1]
 	if len(b) < PrefixValueLen+int(lLen) {
 		return []byte{}, []byte{}
@@ -851,7 +839,7 @@ func ReadIntermediateChilds(b []byte) ([]byte, []byte) {
 
 func getPath(numLevels int, k []byte) []bool {
 	path := make([]bool, numLevels)
-	for n := 0; n < numLevels; n++ {
+	for n := range numLevels {
 		path[n] = k[n/8]&(1<<(n%8)) != 0
 	}
 	return path
@@ -860,9 +848,8 @@ func getPath(numLevels int, k []byte) []bool {
 // Update updates the value for a given existing key. If the given key does not
 // exist, returns an error.
 func (t *Tree) Update(k, v []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
-
 	if err := t.UpdateWithTx(wTx, k, v); err != nil {
 		return err
 	}
@@ -875,7 +862,6 @@ func (t *Tree) Update(k, v []byte) error {
 func (t *Tree) UpdateWithTx(wTx db.WriteTx, k, v []byte) error {
 	t.Lock()
 	defer t.Unlock()
-
 	if !t.editable() {
 		return ErrSnapshotNotEditable
 	}
@@ -930,7 +916,7 @@ func (t *Tree) UpdateWithTx(wTx db.WriteTx, k, v []byte) error {
 // returned, together with the packed siblings of the proof, and a boolean
 // parameter that indicates if the proof is of existence (true) or not (false).
 func (t *Tree) GenProof(k []byte) ([]byte, []byte, []byte, bool, error) {
-	return t.GenProofWithTx(t.db, k)
+	return t.GenProofWithTx(t.treedb, k)
 }
 
 // GenProofWithTx does the same than the GenProof method, but allowing to pass
@@ -1062,7 +1048,7 @@ func bytesToBitmap(b []byte) []bool {
 // will be placed the data found in the tree in the leaf that was on the path
 // going to the input key.
 func (t *Tree) Get(k []byte) ([]byte, []byte, error) {
-	return t.GetWithTx(t.db, k)
+	return t.GetWithTx(t.treedb, k)
 }
 
 // GetWithTx does the same than the Get method, but allowing to pass the
@@ -1151,7 +1137,7 @@ func (t *Tree) setNLeafs(wTx db.WriteTx, nLeafs int) error {
 
 // GetNLeafs returns the number of Leafs of the Tree.
 func (t *Tree) GetNLeafs() (int, error) {
-	return t.GetNLeafsWithTx(t.db)
+	return t.GetNLeafsWithTx(t.treedb)
 }
 
 // GetNLeafsWithTx does the same than the GetNLeafs method, but allowing to
@@ -1167,7 +1153,7 @@ func (t *Tree) GetNLeafsWithTx(rTx db.Reader) (int, error) {
 
 // SetRoot sets the root to the given root
 func (t *Tree) SetRoot(root []byte) error {
-	wTx := t.db.WriteTx()
+	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
 
 	if err := t.SetRootWithTx(wTx, root); err != nil {
@@ -1209,7 +1195,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 			return nil, err
 		}
 	}
-	rTx := t.db
+	rTx := t.treedb
 	// check that the root exists in the db
 	if !bytes.Equal(fromRoot, t.emptyHash) {
 		if _, err := rTx.Get(fromRoot); err == ErrKeyNotFound {
@@ -1222,7 +1208,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 	}
 
 	return &Tree{
-		db:           t.db,
+		treedb:       t.treedb,
 		maxLevels:    t.maxLevels,
 		snapshotRoot: fromRoot,
 		emptyHash:    t.emptyHash,
@@ -1234,7 +1220,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 // Iterate iterates through the full Tree, executing the given function on each
 // node of the Tree.
 func (t *Tree) Iterate(fromRoot []byte, f func([]byte, []byte)) error {
-	return t.IterateWithTx(t.db, fromRoot, f)
+	return t.IterateWithTx(t.treedb, fromRoot, f)
 }
 
 // IterateWithTx does the same than the Iterate method, but allowing to pass
@@ -1258,12 +1244,12 @@ func (t *Tree) IterateWithStop(fromRoot []byte, f func(int, []byte, []byte) bool
 	// allow to define which root to use
 	if fromRoot == nil {
 		var err error
-		fromRoot, err = t.RootWithTx(t.db)
+		fromRoot, err = t.RootWithTx(t.treedb)
 		if err != nil {
 			return err
 		}
 	}
-	return t.iterWithStop(t.db, fromRoot, 0, f)
+	return t.iterWithStop(t.treedb, fromRoot, 0, f)
 }
 
 // IterateWithStopWithTx does the same than the IterateWithStop method, but
@@ -1470,14 +1456,14 @@ node [fontname=Monospace,fontsize=10,shape=box]
 	}
 	if fromRoot == nil {
 		var err error
-		fromRoot, err = t.RootWithTx(t.db)
+		fromRoot, err = t.RootWithTx(t.treedb)
 		if err != nil {
 			return err
 		}
 	}
 
 	nEmpties := 0
-	err := t.iterWithStop(t.db, fromRoot, 0, func(currLvl int, k, v []byte) bool {
+	err := t.iterWithStop(t.treedb, fromRoot, 0, func(currLvl int, k, v []byte) bool {
 		if currLvl == untilLvl {
 			return true // to stop the iter from going down
 		}

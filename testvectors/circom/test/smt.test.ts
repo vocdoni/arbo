@@ -14,7 +14,7 @@ describe("merkletreetree circom-proof-verifier", function () {
     before( async() => {
         const circuitCode = `
             include "smt-proof-verifier_test.circom";
-            component main = SMTVerifierTest(4);
+            component main = SMTVerifierTest(160);
         `;
         fs.writeFileSync(circuitPath, circuitCode, "utf8");
 
@@ -73,6 +73,17 @@ describe("merkletreetree circom-proof-verifier", function () {
         // fromGo is a json CircomVerifierProof generated from Go code using
         // https://github.com/vocdoni/arbo
         let rawdata = fs.readFileSync('go-data-generator/go-smt-verifier-inputs.json');
+        let fromGo = JSON.parse(rawdata);
+        inputsVerifier=fromGo;
+        // console.log("smtverifier js inputs:\n", inputsVerifier);
+
+        const witness = await circuit.calculateWitness(inputsVerifier);
+        await circuit.checkConstraints(witness);
+    });
+    it("Test smt-verifier proof of existence go big inputs", async () => {
+        // fromGo is a json CircomVerifierProof generated from Go code using
+        // https://github.com/vocdoni/arbo
+        let rawdata = fs.readFileSync('go-data-generator/go-smt-verifier-big-inputs.json');
         let fromGo = JSON.parse(rawdata);
         inputsVerifier=fromGo;
         // console.log("smtverifier js inputs:\n", inputsVerifier);
