@@ -43,7 +43,7 @@ func TestGenerator(t *testing.T) {
 	jCvp, err := json.Marshal(cvp)
 	c.Assert(err, qt.IsNil)
 	// store the data into a file that will be used at the circom test
-	err = os.WriteFile("go-smt-verifier-inputs.json", jCvp, 0600)
+	err = os.WriteFile("go-smt-verifier-inputs.json", jCvp, 0o600)
 	c.Assert(err, qt.IsNil)
 
 	// proof of non-existence
@@ -53,7 +53,7 @@ func TestGenerator(t *testing.T) {
 	jCvp, err = json.Marshal(cvp)
 	c.Assert(err, qt.IsNil)
 	// store the data into a file that will be used at the circom test
-	err = os.WriteFile("go-smt-verifier-non-existence-inputs.json", jCvp, 0600)
+	err = os.WriteFile("go-smt-verifier-non-existence-inputs.json", jCvp, 0o600)
 	c.Assert(err, qt.IsNil)
 
 	// create a new tree with big.Int keys
@@ -81,6 +81,6 @@ func TestGenerator(t *testing.T) {
 	jCvp, err = json.Marshal(cvp)
 	c.Assert(err, qt.IsNil)
 	// store the data into a file that will be used at the circom test
-	err = os.WriteFile("go-smt-verifier-big-inputs.json", jCvp, 0600)
+	err = os.WriteFile("go-smt-verifier-big-inputs.json", jCvp, 0o600)
 	c.Assert(err, qt.IsNil)
 }

@@ -19,11 +19,11 @@ import (
 	"io"
 	"math"
 	"runtime"
+	"slices"
 	"sync"
 
 	"go.vocdoni.io/dvote/db"
 	"go.vocdoni.io/dvote/db/prefixeddb"
-	"slices"
 )
 
 const (
@@ -636,7 +636,8 @@ func (t *Tree) add(wTx db.WriteTx, root []byte, fromLvl int, k, v []byte) ([]byt
 // down goes down to the leaf recursively
 func (t *Tree) down(rTx db.Reader, newKey, currKey []byte, siblings [][]byte,
 	path []bool, currLvl int, getLeaf bool) (
-	[]byte, []byte, [][]byte, error) {
+	[]byte, []byte, [][]byte, error,
+) {
 	if currLvl > t.maxLevels {
 		return nil, nil, nil, ErrMaxLevel
 	}
@@ -710,7 +711,8 @@ func (t *Tree) down(rTx db.Reader, newKey, currKey []byte, siblings [][]byte,
 // downVirtually is used when in a leaf already exists, and a new leaf which
 // shares the path until the existing leaf is being added
 func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
-	newPath []bool, currLvl int) ([][]byte, error) {
+	newPath []bool, currLvl int,
+) ([][]byte, error) {
 	var err error
 	if currLvl > t.maxLevels-1 {
 		return nil, ErrMaxVirtualLevel
@@ -730,7 +732,8 @@ func (t *Tree) downVirtually(siblings [][]byte, oldKey, newKey []byte, oldPath,
 
 // up goes up recursively updating the intermediate nodes
 func (t *Tree) up(wTx db.WriteTx, key []byte, siblings [][]byte, path []bool,
-	currLvl, toLvl int) ([]byte, error) {
+	currLvl, toLvl int,
+) ([]byte, error) {
 	var k, v []byte
 	var err error
 	if path[currLvl+toLvl] {
@@ -1255,7 +1258,8 @@ func (t *Tree) IterateWithStop(fromRoot []byte, f func(int, []byte, []byte) bool
 // IterateWithStopWithTx does the same than the IterateWithStop method, but
 // allowing to pass the db.ReadTx that is used.
 func (t *Tree) IterateWithStopWithTx(rTx db.Reader, fromRoot []byte,
-	f func(int, []byte, []byte) bool) error {
+	f func(int, []byte, []byte) bool,
+) error {
 	// allow to define which root to use
 	if fromRoot == nil {
 		var err error
@@ -1268,7 +1272,8 @@ func (t *Tree) IterateWithStopWithTx(rTx db.Reader, fromRoot []byte,
 }
 
 func (t *Tree) iterWithStop(rTx db.Reader, k []byte, currLevel int,
-	f func(int, []byte, []byte) bool) error {
+	f func(int, []byte, []byte) bool,
+) error {
 	var v []byte
 	var err error
 	if bytes.Equal(k, t.emptyHash) {

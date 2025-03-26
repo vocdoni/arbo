@@ -14,8 +14,10 @@ func TestCircomVerifierProof(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 4,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 4,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 	defer tree.treedb.Close() //nolint:errcheck
 

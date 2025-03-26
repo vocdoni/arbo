@@ -293,6 +293,8 @@ func bigIntToLeafValue(hFn HashFunction, bFullValue []byte) ([]byte, error) {
 }
 
 // splitInGroups splits the items in nGroups groups
+//
+//nolint:unused
 func splitInGroups[T any](items []T, nGroups int) [][]T {
 	groups := make([][]T, nGroups)
 	for i, item := range items {
