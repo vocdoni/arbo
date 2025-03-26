@@ -285,14 +285,14 @@ func (f HashMiMC7) Len() int {
 	return 32 //nolint:gomnd
 }
 
-func (f HashMiMC7) Hash(b ...*big.Int) (*big.Int, error) {
+func (f HashMiMC7) Hash(b ...[]byte) ([]byte, error) {
 	var toHash []*big.Int
 	for _, i := range b {
-		toHash = append(toHash, BigToFF(BN254BaseField, i))
+		toHash = append(toHash, new(big.Int).SetBytes(SwapEndianness(i)))
 	}
 	h, err := mimc7.Hash(toHash, nil)
 	if err != nil {
 		return nil, err
 	}
-	return h, nil
+	return BigIntToBytes(f.Len(), h), nil
 }

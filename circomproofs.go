@@ -40,7 +40,7 @@ func (cvp CircomVerifierProof) MarshalJSON() ([]byte, error) {
 
 func siblingsToStringArray(s [][]byte) []string {
 	var r []string
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		r = append(r, BytesToBigInt(s[i]).String())
 	}
 	return r

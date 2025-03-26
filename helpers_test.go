@@ -83,7 +83,7 @@ func importDumpLoopAdd(tree *Tree, b []byte) error {
 }
 
 func TestReadTreeDBG(t *testing.T) {
-	t.Skip() // test just for debugging purposes, disabled by default
+	t.Skip("test just for debugging purposes, disabled by default")
 
 	c := qt.New(t)
 

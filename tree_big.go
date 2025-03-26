@@ -125,7 +125,7 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 	}
 	// add it to the tree
 	if err := t.Add(bk, bv); err != nil {
-		return err
+		return fmt.Errorf("raw key cannot be added: %w", err)
 	}
 	// lock the tree to prevent concurrent writes to the valuesdb
 	t.Lock()
@@ -135,7 +135,7 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 	defer wTx.Discard()
 	// store the full value in the valuesdb
 	if err := wTx.Set(bk, fbv); err != nil {
-		return err
+		return fmt.Errorf("full value cannot be stored: %w", err)
 	}
 	return wTx.Commit()
 }
@@ -185,6 +185,10 @@ func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
 	return t.leafToBigInts(bk, bv)
 }
 
+// GenProofBigInts generates a proof for a key as a big.Int. It converts the
+// big.Int key into bytes and generates a proof for the key, then it returns
+// the key, the value of the leaf node, the siblings and a boolean indicating
+// if the key exists or an error if something fails.
 func (t *Tree) GenProofBigInts(k *big.Int) ([]byte, []byte, []byte, bool, error) {
 	if k == nil {
 		return nil, nil, nil, false, fmt.Errorf("key cannot be nil")
@@ -192,11 +196,26 @@ func (t *Tree) GenProofBigInts(k *big.Int) ([]byte, []byte, []byte, bool, error)
 	return t.GenProof(bigIntToKey(t.maxKeyLen(), k))
 }
 
+// GenerateCircomVerifierProofBigInt generates a CircomVerifierProof for a key
+// as a big.Int. It converts the big.Int key into bytes and generates a proof
+// for the key, then it returns the CircomVerifierProof or an error if
+// something fails.
 func (t *Tree) GenerateCircomVerifierProofBigInt(k *big.Int) (*CircomVerifierProof, error) {
 	if k == nil {
 		return nil, fmt.Errorf("key cannot be nil")
 	}
 	return t.GenerateCircomVerifierProof(bigIntToKey(t.maxKeyLen(), k))
+}
+
+// GenerateGnarkVerifierProofBigInt generates a GnarkVerifierProof for a key
+// as a big.Int. It converts the big.Int key into bytes and generates a proof
+// for the key, then it returns the GnarkVerifierProof or an error if
+// something fails.
+func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof, error) {
+	if k == nil {
+		return nil, fmt.Errorf("key cannot be nil")
+	}
+	return t.GenerateGnarkVerifierProof(bigIntToKey(t.maxKeyLen(), k))
 }
 
 // maxKeyLen returns the maximum length of the key in bytes for a tree
@@ -233,8 +252,13 @@ func (t *Tree) leafToBigInts(key, value []byte) (*big.Int, []*big.Int, error) {
 }
 
 // BigIntToBytes converts a big.Int into a byte slice of length keyLen
-func bigIntToKey(keyLen int, b *big.Int) []byte {
-	return BigIntToBytes(keyLen, b)
+func bigIntToKey(keyLen int, biKey *big.Int) []byte {
+	return BigIntToBytes(keyLen, biKey)
+}
+
+// leafKeyToBigInt converts the bytes of a key into a big.Int
+func leafKeyToBigInt(key []byte) *big.Int {
+	return BytesToBigInt(key)
 }
 
 // bigIntLeaf converts a big.Int key and a slice of big.Int values into the

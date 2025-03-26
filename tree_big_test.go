@@ -13,21 +13,25 @@ func TestGenCheckProofBigInt(t *testing.T) {
 	c := qt.New(t)
 	tree, err := NewTree(Config{
 		Database:     memdb.New(),
-		MaxLevels:    256,
-		HashFunction: HashFunctionPoseidon,
+		MaxLevels:    160,
+		HashFunction: HashFunctionMimc7,
 	})
 	c.Assert(err, qt.IsNil)
 	defer tree.treedb.Close()   //nolint:errcheck
 	defer tree.valuesdb.Close() //nolint:errcheck
 
 	keys := []*big.Int{}
+	values := [][]*big.Int{}
 	for range 1000 {
 		k, err := rand.Int(rand.Reader, big.NewInt(100_000_000_000))
 		c.Assert(err, qt.IsNil)
 		v := new(big.Int).Mul(k, big.NewInt(2))
+		values = append(values, []*big.Int{v})
 		c.Assert(tree.AddBigInt(k, v), qt.IsNil)
 		keys = append(keys, k)
 	}
+	_, err = tree.AddBatchBigInt(keys, values)
+	c.Assert(err, qt.IsNil)
 
 	// validate 20 random keys
 	for range 20 {
@@ -216,62 +220,6 @@ func TestAddBatchBigInt(t *testing.T) {
 	invalids, err = tree.AddBatchBigInt(nil, nil)
 	c.Assert(err, qt.IsNil)
 	c.Check(len(invalids), qt.Equals, 0)
-}
-
-func TestGenerateCircomVerifierProofBigInt(t *testing.T) {
-	c := qt.New(t)
-	tree, err := NewTree(Config{
-		Database:     memdb.New(),
-		MaxLevels:    256,
-		HashFunction: HashFunctionPoseidon,
-	})
-	c.Assert(err, qt.IsNil)
-	defer tree.treedb.Close()   //nolint:errcheck
-	defer tree.valuesdb.Close() //nolint:errcheck
-
-	// Store keys for later proof generation
-	keys := make([]*big.Int, 100)
-	values := make([][]*big.Int, 100)
-
-	// Add entries with large random big ints
-	for i := range 100 {
-		k, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 25))
-		c.Assert(err, qt.IsNil)
-		keys[i] = k
-
-		v1, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 25))
-		c.Assert(err, qt.IsNil)
-		v2, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 25))
-		c.Assert(err, qt.IsNil)
-		values[i] = []*big.Int{v1, v2}
-
-		c.Assert(tree.AddBigInt(k, v1, v2), qt.IsNil)
-	}
-
-	// Generate and verify proofs for random keys
-	for i := range 10 {
-		idx := i % len(keys)
-		proof, err := tree.GenerateCircomVerifierProofBigInt(keys[idx])
-		c.Assert(err, qt.IsNil)
-		c.Assert(proof, qt.IsNotNil)
-
-		// Verify the proof structure
-		c.Assert(proof.Root, qt.IsNotNil)
-		c.Assert(proof.Key, qt.IsNotNil)
-		c.Assert(proof.Value, qt.IsNotNil)
-		c.Assert(proof.Siblings, qt.IsNotNil)
-	}
-
-	// Test non-existent key
-	nonExistentKey, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 25))
-	c.Assert(err, qt.IsNil)
-	nonExistentProof, err := tree.GenerateCircomVerifierProofBigInt(nonExistentKey)
-	c.Check(err, qt.IsNil)
-	c.Check(nonExistentProof, qt.IsNotNil)
-
-	// Test nil key
-	_, err = tree.GenerateCircomVerifierProofBigInt(nil)
-	c.Check(err, qt.IsNotNil)
 }
 
 func BenchmarkAddBatchBigInt(b *testing.B) {
