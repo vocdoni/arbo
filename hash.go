@@ -9,6 +9,7 @@ import (
 	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark-crypto/hash"
+	"github.com/iden3/go-iden3-crypto/mimc7"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/crypto/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
@@ -31,6 +32,8 @@ var (
 	// TypeHashMiMC_BN254 represents the label for the HashFunction of MiMC
 	// over BN254 curve
 	TypeHashMiMC_BN254 = []byte("mimc_bn254")
+	// TypeHashMimc7 represents the label for the HashFunction of Mimc7
+	TypeHashMimc7 = []byte("mimc7")
 
 	// HashFunctionSha256 contains the HashSha256 struct which implements
 	// the HashFunction interface
@@ -50,6 +53,9 @@ var (
 	// HashFunctionMiMC_BN254 contains the HashMiMC_BN254 struct which
 	// implements the HashFunction interface
 	HashFunctionMiMC_BN254 HashMiMC_BN254
+	// HashFunctionMimc7 contains the HashMiMC7 struct which implements the
+	// HashFunction interface
+	HashFunctionMimc7 HashMiMC7
 )
 
 // Once Generics are at Go, this will be updated (August 2021
@@ -267,4 +273,26 @@ func hashMiMCbyChunks(h hash.StateStorer, q *big.Int, b ...[]byte) ([]byte, erro
 		}
 	}
 	return SwapEndianness(h.Sum(nil)), nil
+}
+
+type HashMiMC7 struct{}
+
+func (f HashMiMC7) Type() []byte {
+	return TypeHashMimc7
+}
+
+func (f HashMiMC7) Len() int {
+	return 32 //nolint:gomnd
+}
+
+func (f HashMiMC7) Hash(b ...*big.Int) (*big.Int, error) {
+	var toHash []*big.Int
+	for _, i := range b {
+		toHash = append(toHash, BigToFF(BN254BaseField, i))
+	}
+	h, err := mimc7.Hash(toHash, nil)
+	if err != nil {
+		return nil, err
+	}
+	return h, nil
 }
