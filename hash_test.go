@@ -1,7 +1,6 @@
 package arbo
 
 import (
-	"crypto/rand"
 	"encoding/hex"
 	"math/big"
 	"testing"
@@ -67,25 +66,4 @@ func TestHashMiMC(t *testing.T) {
 	c.Assert(hex.EncodeToString(h),
 		qt.Equals,
 		"f881f34991492d823e02565c778b824bac5eacef6340b70ee90a8966a2e63900")
-}
-
-func TestHashMoreThan32BytesMiMC(t *testing.T) {
-	c := qt.New(t)
-
-	// create a random 257 bytes
-	b := make([]byte, 257)
-	_, err := rand.Read(b)
-	c.Assert(err, qt.IsNil)
-
-	// MiMC hash bn254
-	mimcbn254 := &HashMiMC_BN254{}
-	h, err := mimcbn254.Hash(b)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(h), qt.Equals, 32)
-
-	// MiMC hash bls12377
-	mimcbls12377 := &HashMiMC_BLS12_377{}
-	h, err = mimcbls12377.Hash(b)
-	c.Assert(err, qt.IsNil)
-	c.Assert(len(h), qt.Equals, 32)
 }

@@ -122,7 +122,11 @@ func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return t.leafToBigInts(bk, bv)
+	bFullValue, err := t.valuesdb.Get(bk)
+	if err != nil {
+		return nil, nil, err
+	}
+	return t.leafToBigInts(bk, bv, bFullValue)
 }
 
 // GenProofBigInts generates a proof for a key as a big.Int. It converts the
@@ -167,22 +171,29 @@ func (t *Tree) maxKeyLen() int {
 // into a big.Int key and a slice of big.Int values, it gets the full value
 // from the valuesdb and checks if it matches the value of the leaf node. It
 // returns the original key and values or an error if the values don't match.
-func (t *Tree) leafToBigInts(key, value []byte) (*big.Int, []*big.Int, error) {
-	bFullValue, err := t.valuesdb.Get(key)
-	if err != nil {
-		return nil, nil, err
-	}
+func (t *Tree) leafToBigInts(key, value, fullValue []byte) (*big.Int, []*big.Int, error) {
 	// reverse the process of values encoding
-	values := fullValueToValues(bFullValue)
+	values := fullValueToValues(fullValue)
 	// recalculate the value to check if it matches the stored value
 	expectedFullValue, err := valuesToFullValue(values)
 	if err != nil {
 		return nil, nil, err
 	}
 	// check if the value of the leaf node matches the stored value
-	if !bytes.Equal(expectedFullValue, bFullValue) {
+	if !bytes.Equal(expectedFullValue, fullValue) {
 		return nil, nil, fmt.Errorf("LeafToBigInt: expectedFullValue != value")
 	}
+	// reencode the leaf value of the tree to check if it matches the value
+	encodedValues, err := encodeBigIntValues(t.HashFunction(), values...)
+	if err != nil {
+		return nil, nil, err
+	}
+	// check if the value of the leaf node matches the value used to build the
+	// tree
+	if !bytes.Equal(encodedValues, value) {
+		return nil, nil, fmt.Errorf("LeafToBigInt: encodedValues != value")
+	}
+	// convert the bytes of the key to a big.Int
 	return BytesToBigInt(key), values, nil
 }
 

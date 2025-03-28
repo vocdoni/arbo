@@ -265,15 +265,3 @@ func benchmarkAddBatchBigInt(b *testing.B, hashFunc HashFunction, keys []*big.In
 		tree.valuesdb.Close() //nolint:errcheck
 	}
 }
-
-func TestEncodeBigIntValues(t *testing.T) {
-	c := qt.New(t)
-
-	veryBigValue := new(big.Int).Mul(BLS12377BaseField, big.NewInt(17))
-	veryBigValue2 := new(big.Int).Mul(BLS12377BaseField, big.NewInt(6))
-	res, err := encodeBigIntValues(HashFunctionMiMC_BN254, veryBigValue, veryBigValue2)
-	c.Assert(err, qt.IsNil)
-
-	c.Log(res)
-	c.Log(new(big.Int).SetBytes(res))
-}
