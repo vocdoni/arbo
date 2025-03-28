@@ -6,7 +6,6 @@ import (
 
 	fr_bls12377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
 	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
-	fr_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr"
 	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
 	"github.com/consensys/gnark-crypto/hash"
 	"github.com/iden3/go-iden3-crypto/mimc7"
@@ -67,6 +66,7 @@ type HashFunction interface {
 	Type() []byte
 	Len() int
 	Hash(...[]byte) ([]byte, error)
+	SafeValue([]byte) ([]byte, error)
 }
 
 // HashSha256 implements the HashFunction interface for the Sha256 hash
@@ -90,6 +90,10 @@ func (f HashSha256) Hash(b ...[]byte) ([]byte, error) {
 	}
 	h := sha256.Sum256(toHash)
 	return h[:], nil
+}
+
+func (f HashSha256) SafeValue(b []byte) ([]byte, error) {
+	return b, nil
 }
 
 // HashPoseidon implements the HashFunction interface for the Poseidon hash
@@ -120,6 +124,10 @@ func (f HashPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	}
 	hB := BigIntToBytes(f.Len(), h)
 	return hB, nil
+}
+
+func (f HashPoseidon) SafeValue(b []byte) ([]byte, error) {
+	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
 }
 
 // HashMultiPoseidon implements the HashFunction interface for the MultiPoseidon hash
@@ -160,6 +168,10 @@ func (f HashMultiPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	return BigIntToBytes(f.Len(), h), nil
 }
 
+func (f HashMultiPoseidon) SafeValue(b []byte) ([]byte, error) {
+	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+}
+
 // HashBlake2b implements the HashFunction interface for the Blake2b hash
 type HashBlake2b struct{}
 
@@ -187,6 +199,10 @@ func (f HashBlake2b) Hash(b ...[]byte) ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
+func (f HashBlake2b) SafeValue(b []byte) ([]byte, error) {
+	return b, nil
+}
+
 // HashMiMC_BLS12_377 implements the HashFunction interface for the MiMC hash
 // over the BLS12-377 curve
 type HashMiMC_BLS12_377 struct{}
@@ -208,6 +224,10 @@ func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
 	return hashMiMCbyChunks(h, q, b...)
 }
 
+func (f HashMiMC_BLS12_377) SafeValue(b []byte) ([]byte, error) {
+	return BigToFF(BLS12377BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+}
+
 // HashMiMC_BN254 implements the HashFunction interface for the MiMC hash
 // over the BN254 curve
 type HashMiMC_BN254 struct{}
@@ -224,9 +244,20 @@ func (f HashMiMC_BN254) Len() int {
 
 // Hash implements the hash method for the HashFunction HashMiMC_BN254
 func (f HashMiMC_BN254) Hash(b ...[]byte) ([]byte, error) {
-	q := fr_bn254.Modulus()
+	// q := fr_bn254.Modulus()
+	// h := mimc_bn254.NewMiMC()
+	// return hashMiMCbyChunks(h, q, b...)
 	h := mimc_bn254.NewMiMC()
-	return hashMiMCbyChunks(h, q, b...)
+	for _, input := range b {
+		if _, err := h.Write(input); err != nil {
+			return nil, err
+		}
+	}
+	return h.Sum(nil), nil
+}
+
+func (f HashMiMC_BN254) SafeValue(b []byte) ([]byte, error) {
+	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
 }
 
 // hashMiMCbyChunks is a helper function to hash by chunks using the MiMC hash.
@@ -295,4 +326,8 @@ func (f HashMiMC7) Hash(b ...[]byte) ([]byte, error) {
 		return nil, err
 	}
 	return BigIntToBytes(f.Len(), h), nil
+}
+
+func (f HashMiMC7) SafeValue(b []byte) ([]byte, error) {
+	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
 }
