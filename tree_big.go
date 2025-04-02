@@ -3,7 +3,6 @@ package arbo
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math/big"
 	"slices"
 )
@@ -23,7 +22,7 @@ func (t *Tree) AddBatchBigInt(k []*big.Int, v [][]*big.Int) ([]Invalid, error) {
 	bvs := make([][]byte, len(k))
 	fbvs := make([][]byte, len(k))
 	for i, ki := range k {
-		bks[i], bvs[i], fbvs[i], err = encodeBigIntData(t.HashFunction(), t.maxKeyLen(), ki, v[i])
+		bks[i], bvs[i], fbvs[i], err = encodeBigIntData(t.HashFunction(), ki, v[i])
 		if err != nil {
 			return nil, err
 		}
@@ -58,9 +57,8 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 		return fmt.Errorf("key cannot be nil")
 	}
 	// convert the big ints to bytes
-	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), t.maxKeyLen(), k, v)
+	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), k, v)
 	if err != nil {
-		log.Println(err, k, v)
 		return err
 	}
 	// add it to the tree
@@ -89,7 +87,7 @@ func (t *Tree) UpdateBigInt(k *big.Int, value ...*big.Int) error {
 		return fmt.Errorf("key cannot be nil")
 	}
 	// convert the big ints to bytes
-	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), t.maxKeyLen(), k, value)
+	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), k, value)
 	if err != nil {
 		return err
 	}
@@ -118,7 +116,8 @@ func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
 	if k == nil {
 		return nil, nil, fmt.Errorf("key cannot be nil")
 	}
-	bk, bv, err := t.Get(bigIntToLeafKey(t.maxKeyLen(), k))
+	bk := t.HashFunction().SafeBigInt(k)
+	_, bv, err := t.Get(bk)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -137,7 +136,7 @@ func (t *Tree) GenProofBigInts(k *big.Int) ([]byte, []byte, []byte, bool, error)
 	if k == nil {
 		return nil, nil, nil, false, fmt.Errorf("key cannot be nil")
 	}
-	return t.GenProof(bigIntToLeafKey(t.maxKeyLen(), k))
+	return t.GenProof(t.HashFunction().SafeBigInt(k))
 }
 
 // GenerateCircomVerifierProofBigInt generates a CircomVerifierProof for a key
@@ -148,7 +147,7 @@ func (t *Tree) GenerateCircomVerifierProofBigInt(k *big.Int) (*CircomVerifierPro
 	if k == nil {
 		return nil, fmt.Errorf("key cannot be nil")
 	}
-	return t.GenerateCircomVerifierProof(bigIntToLeafKey(t.maxKeyLen(), k))
+	return t.GenerateCircomVerifierProof(t.HashFunction().SafeBigInt(k))
 }
 
 // GenerateGnarkVerifierProofBigInt generates a GnarkVerifierProof for a key
@@ -159,12 +158,7 @@ func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof
 	if k == nil {
 		return nil, fmt.Errorf("key cannot be nil")
 	}
-	return t.GenerateGnarkVerifierProof(bigIntToLeafKey(t.maxKeyLen(), k))
-}
-
-// maxKeyLen returns the maximum length of the key in bytes for a tree
-func (t *Tree) maxKeyLen() int {
-	return keyLenByLevels(t.maxLevels)
+	return t.GenerateGnarkVerifierProof(t.HashFunction().SafeBigInt(k))
 }
 
 // leafToBigInts converts the bytes of the key and the value of a leaf node
@@ -194,17 +188,12 @@ func (t *Tree) leafToBigInts(key, value, fullValue []byte) (*big.Int, []*big.Int
 		return nil, nil, fmt.Errorf("LeafToBigInt: encodedValues != value")
 	}
 	// convert the bytes of the key to a big.Int
-	return BytesToBigInt(key), values, nil
-}
-
-// BigIntToBytes converts a big.Int into a byte slice of length keyLen
-func bigIntToLeafKey(keyLen int, biKey *big.Int) []byte {
-	return BigIntToBytes(keyLen, biKey)
+	return leafKeyToBigInt(key), values, nil
 }
 
 // leafKeyToBigInt converts the bytes of a key into a big.Int
 func leafKeyToBigInt(key []byte) *big.Int {
-	return BytesToBigInt(key)
+	return new(big.Int).SetBytes(key)
 }
 
 // valuesToFullValue converts a slice of big.Int values into the bytes of the
@@ -245,12 +234,12 @@ func fullValueToValues(fullValue []byte) []*big.Int {
 // encodeBigIntData converts a big.Int key and a slice of big.Int values into the
 // bytes of the key, the bytes of the value used to build the tree and the
 // bytes of the full value encoded
-func encodeBigIntData(hFn HashFunction, keyLen int, key *big.Int, values []*big.Int) ([]byte, []byte, []byte, error) {
+func encodeBigIntData(hFn HashFunction, key *big.Int, values []*big.Int) ([]byte, []byte, []byte, error) {
 	if key == nil {
 		return nil, nil, nil, fmt.Errorf("key cannot be nil")
 	}
 	// calculate the bytes of the key
-	bKey := bigIntToLeafKey(keyLen, key)
+	bKey := hFn.SafeBigInt(key)
 	// calculate the bytes of the full values (should be reversible)
 	bFullValue, err := valuesToFullValue(values)
 	if err != nil {
@@ -271,11 +260,11 @@ func encodeBigIntValues(hFn HashFunction, values ...*big.Int) ([]byte, error) {
 	chunks := make([][]byte, len(values))
 	for _, v := range values {
 		// truncate the value if it exceeds the maximum chunk bytes
-		value, err := hFn.SafeValue(v.Bytes())
-		if err != nil {
-			return nil, err
+		value := hFn.SafeBigInt(v)
+		if value == nil {
+			return nil, fmt.Errorf("value cannot be nil")
 		}
-		chunks = append(chunks, value)
+		chunks = append(chunks, SwapEndianness(value))
 	}
 	return hFn.Hash(chunks...)
 }

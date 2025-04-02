@@ -66,7 +66,8 @@ type HashFunction interface {
 	Type() []byte
 	Len() int
 	Hash(...[]byte) ([]byte, error)
-	SafeValue([]byte) ([]byte, error)
+	SafeValue([]byte) []byte
+	SafeBigInt(*big.Int) []byte
 }
 
 // HashSha256 implements the HashFunction interface for the Sha256 hash
@@ -92,8 +93,12 @@ func (f HashSha256) Hash(b ...[]byte) ([]byte, error) {
 	return h[:], nil
 }
 
-func (f HashSha256) SafeValue(b []byte) ([]byte, error) {
-	return b, nil
+func (f HashSha256) SafeValue(b []byte) []byte {
+	return b
+}
+
+func (f HashSha256) SafeBigInt(b *big.Int) []byte {
+	return b.Bytes()
 }
 
 // HashPoseidon implements the HashFunction interface for the Poseidon hash
@@ -126,8 +131,12 @@ func (f HashPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	return hB, nil
 }
 
-func (f HashPoseidon) SafeValue(b []byte) ([]byte, error) {
-	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+func (f HashPoseidon) SafeValue(b []byte) []byte {
+	return f.SafeBigInt(new(big.Int).SetBytes(b))
+}
+
+func (f HashPoseidon) SafeBigInt(b *big.Int) []byte {
+	return BigToFF(BN254BaseField, b).Bytes()
 }
 
 // HashMultiPoseidon implements the HashFunction interface for the MultiPoseidon hash
@@ -168,8 +177,12 @@ func (f HashMultiPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	return BigIntToBytes(f.Len(), h), nil
 }
 
-func (f HashMultiPoseidon) SafeValue(b []byte) ([]byte, error) {
-	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+func (f HashMultiPoseidon) SafeValue(b []byte) []byte {
+	return f.SafeBigInt(new(big.Int).SetBytes(b))
+}
+
+func (f HashMultiPoseidon) SafeBigInt(b *big.Int) []byte {
+	return BigToFF(BN254BaseField, b).Bytes()
 }
 
 // HashBlake2b implements the HashFunction interface for the Blake2b hash
@@ -199,8 +212,12 @@ func (f HashBlake2b) Hash(b ...[]byte) ([]byte, error) {
 	return hasher.Sum(nil), nil
 }
 
-func (f HashBlake2b) SafeValue(b []byte) ([]byte, error) {
-	return b, nil
+func (f HashBlake2b) SafeValue(b []byte) []byte {
+	return b
+}
+
+func (f HashBlake2b) SafeBigInt(b *big.Int) []byte {
+	return b.Bytes()
 }
 
 // HashMiMC_BLS12_377 implements the HashFunction interface for the MiMC hash
@@ -224,8 +241,12 @@ func (f HashMiMC_BLS12_377) Hash(b ...[]byte) ([]byte, error) {
 	return hashMiMCbyChunks(h, q, b...)
 }
 
-func (f HashMiMC_BLS12_377) SafeValue(b []byte) ([]byte, error) {
-	return BigToFF(BLS12377BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+func (f HashMiMC_BLS12_377) SafeValue(b []byte) []byte {
+	return f.SafeBigInt(new(big.Int).SetBytes(b))
+}
+
+func (f HashMiMC_BLS12_377) SafeBigInt(b *big.Int) []byte {
+	return BigToFF(BLS12377BaseField, b).Bytes()
 }
 
 // HashMiMC_BN254 implements the HashFunction interface for the MiMC hash
@@ -248,16 +269,24 @@ func (f HashMiMC_BN254) Hash(b ...[]byte) ([]byte, error) {
 	// h := mimc_bn254.NewMiMC()
 	// return hashMiMCbyChunks(h, q, b...)
 	h := mimc_bn254.NewMiMC()
+	var fullBytes []byte
 	for _, input := range b {
-		if _, err := h.Write(input); err != nil {
-			return nil, err
-		}
+		fullBytes = append(fullBytes, input...)
+	}
+	for start := 0; start < len(fullBytes); start += h.BlockSize() {
+		end := min(start+h.BlockSize(), len(fullBytes))
+		chunk := fullBytes[start:end]
+		h.Write(chunk)
 	}
 	return h.Sum(nil), nil
 }
 
-func (f HashMiMC_BN254) SafeValue(b []byte) ([]byte, error) {
-	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+func (f HashMiMC_BN254) SafeValue(b []byte) []byte {
+	return f.SafeBigInt(new(big.Int).SetBytes(b))
+}
+
+func (f HashMiMC_BN254) SafeBigInt(b *big.Int) []byte {
+	return BigToFF(BN254BaseField, b).Bytes()
 }
 
 // hashMiMCbyChunks is a helper function to hash by chunks using the MiMC hash.
@@ -319,7 +348,7 @@ func (f HashMiMC7) Len() int {
 func (f HashMiMC7) Hash(b ...[]byte) ([]byte, error) {
 	var toHash []*big.Int
 	for _, i := range b {
-		toHash = append(toHash, new(big.Int).SetBytes(SwapEndianness(i)))
+		toHash = append(toHash, BytesToBigInt(i))
 	}
 	h, err := mimc7.Hash(toHash, nil)
 	if err != nil {
@@ -328,6 +357,10 @@ func (f HashMiMC7) Hash(b ...[]byte) ([]byte, error) {
 	return BigIntToBytes(f.Len(), h), nil
 }
 
-func (f HashMiMC7) SafeValue(b []byte) ([]byte, error) {
-	return BigToFF(BN254BaseField, new(big.Int).SetBytes(b)).Bytes(), nil
+func (f HashMiMC7) SafeValue(b []byte) []byte {
+	return BigToFF(BN254BaseField, BytesToBigInt(b)).Bytes()
+}
+
+func (f HashMiMC7) SafeBigInt(b *big.Int) []byte {
+	return f.SafeValue(b.Bytes())
 }

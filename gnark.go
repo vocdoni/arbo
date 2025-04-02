@@ -46,7 +46,7 @@ func (t *Tree) GenerateGnarkVerifierProof(k []byte) (*GnarkVerifierProof, error)
 	// initialize the GnarkVerifierProof
 	gp := GnarkVerifierProof{
 		Root:     BytesToBigInt(root),
-		Key:      leafKeyToBigInt(k),
+		Key:      BytesToBigInt(k),
 		Value:    BytesToBigInt(value),
 		Siblings: bigSiblings,
 	}
