@@ -125,7 +125,7 @@ func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return t.leafToBigInts(bk, bv, bFullValue)
+	return t.leafToBigInts(ExplicitZero(bk), bv, bFullValue)
 }
 
 // GenProofBigInts generates a proof for a key as a big.Int. It converts the
@@ -259,12 +259,11 @@ func encodeBigIntData(hFn HashFunction, key *big.Int, values []*big.Int) ([]byte
 func encodeBigIntValues(hFn HashFunction, values ...*big.Int) ([]byte, error) {
 	chunks := make([][]byte, len(values))
 	for _, v := range values {
-		// truncate the value if it exceeds the maximum chunk bytes
 		value := hFn.SafeBigInt(v)
 		if value == nil {
 			return nil, fmt.Errorf("value cannot be nil")
 		}
-		chunks = append(chunks, SwapEndianness(value))
+		chunks = append(chunks, value)
 	}
 	return hFn.Hash(chunks...)
 }

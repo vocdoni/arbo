@@ -177,12 +177,26 @@ func (f HashMultiPoseidon) Hash(b ...[]byte) ([]byte, error) {
 	return BigIntToBytes(f.Len(), h), nil
 }
 
+// SafeValue returns a valid value of the byte slice provided for the current
+// hash function. It expects a byte slice that is a little-endian representation
+// of a big.Int value. The function converts the byte slice to a big.Int and
+// calls SafeBigInt to get the valid value.
 func (f HashMultiPoseidon) SafeValue(b []byte) []byte {
-	return f.SafeBigInt(new(big.Int).SetBytes(b))
+	return f.SafeBigInt(BytesToBigInt(b))
 }
 
+// SafeBigInt returns a valid value of the big.Int provided for the current
+// hash function. In MultiPoseidon, a value is considered valid if it is
+// represented in the BN254 base field. The hash function also expects the
+// value to be in little-endian format. The function converts the big.Int to
+// the BN254 base field and then converts it to bytes swapping the endianness
+// to little-endian. If the resulting big.Int is zero, it returns a byte
+// slices with a single zero byte.
 func (f HashMultiPoseidon) SafeBigInt(b *big.Int) []byte {
-	return BigToFF(BN254BaseField, b).Bytes()
+	safeBigInt := BigToFF(BN254BaseField, b)
+	arboBytes := BigIntToBytes(f.Len(), safeBigInt)
+	return ExplicitZero(arboBytes)
+	// return ExplicitZero(BigToFF(BN254BaseField, b).Bytes())
 }
 
 // HashBlake2b implements the HashFunction interface for the Blake2b hash

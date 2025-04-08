@@ -12,7 +12,6 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/vocdoni/arbo"
 	"github.com/vocdoni/arbo/memdb"
-	"github.com/vocdoni/gnark-crypto-primitives/hash/bn254/mimc7"
 	"github.com/vocdoni/gnark-crypto-primitives/hash/bn254/poseidon"
 	garbo "github.com/vocdoni/gnark-crypto-primitives/tree/arbo"
 )
@@ -26,27 +25,16 @@ type testCircuit struct {
 	Siblings [nLevels]frontend.Variable
 }
 
-func HashFn(api frontend.API, data ...frontend.Variable) (frontend.Variable, error) {
-	h, err := mimc7.NewMiMC(api)
-	if err != nil {
-		return nil, err
-	}
-	if err := h.Write(data...); err != nil {
-		return nil, err
-	}
-	return h.Sum(), nil
-}
-
 func (circuit *testCircuit) Define(api frontend.API) error {
-	return garbo.CheckInclusionProof(api, poseidon.Hash, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
+	return garbo.CheckInclusionProof(api, poseidon.MultiHash, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
 }
 
 func TestGnarkSMTVerifier(t *testing.T) {
 	c := qt.New(t)
 	tree, err := arbo.NewTree(arbo.Config{
 		Database:     memdb.New(),
-		MaxLevels:    nLevels,
-		HashFunction: arbo.HashFunctionPoseidon,
+		MaxLevels:    255,
+		HashFunction: arbo.HashFunctionMultiPoseidon,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -54,7 +42,7 @@ func TestGnarkSMTVerifier(t *testing.T) {
 		keys   []*big.Int
 		values [][]*big.Int
 	)
-	max, _ := new(big.Int).SetString("100000000000000000000000000000000", 10)
+	max, _ := new(big.Int).SetString("10000000000000000000000000", 10)
 	for range 100 {
 		k, err := rand.Int(rand.Reader, max)
 		qt.Assert(t, err, qt.IsNil)

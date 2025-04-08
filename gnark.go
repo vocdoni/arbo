@@ -53,7 +53,7 @@ func (t *Tree) GenerateGnarkVerifierProof(k []byte) (*GnarkVerifierProof, error)
 	// if the arbo proof is for a non-existing key, set the old key and value
 	// to the key and value of the proof
 	if !existence {
-		gp.OldKey = new(big.Int).SetBytes(oldKey)
+		gp.OldKey = BytesToBigInt(oldKey)
 		gp.OldValue = BytesToBigInt(value)
 		gp.Fnc = big.NewInt(0)
 	} else {
