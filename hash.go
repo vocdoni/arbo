@@ -196,7 +196,6 @@ func (f HashMultiPoseidon) SafeBigInt(b *big.Int) []byte {
 	safeBigInt := BigToFF(BN254BaseField, b)
 	arboBytes := BigIntToBytes(f.Len(), safeBigInt)
 	return ExplicitZero(arboBytes)
-	// return ExplicitZero(BigToFF(BN254BaseField, b).Bytes())
 }
 
 // HashBlake2b implements the HashFunction interface for the Blake2b hash
@@ -372,9 +371,11 @@ func (f HashMiMC7) Hash(b ...[]byte) ([]byte, error) {
 }
 
 func (f HashMiMC7) SafeValue(b []byte) []byte {
-	return BigToFF(BN254BaseField, BytesToBigInt(b)).Bytes()
+	return f.SafeBigInt(BytesToBigInt(b))
 }
 
 func (f HashMiMC7) SafeBigInt(b *big.Int) []byte {
-	return f.SafeValue(b.Bytes())
+	safeBigInt := BigToFF(BN254BaseField, b)
+	arboBytes := BigIntToBytes(f.Len(), safeBigInt)
+	return ExplicitZero(arboBytes)
 }
