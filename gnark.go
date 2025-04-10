@@ -49,25 +49,22 @@ func (t *Tree) GenerateGnarkVerifierProof(k []byte) (*GnarkVerifierProof, error)
 		Key:      BytesToBigInt(k),
 		Value:    BytesToBigInt(value),
 		Siblings: bigSiblings,
+		OldKey:   big.NewInt(0),
+		OldValue: big.NewInt(0),
+		IsOld0:   big.NewInt(0),
+		Fnc:      big.NewInt(0), // inclusion
 	}
 	// if the arbo proof is for a non-existing key, set the old key and value
 	// to the key and value of the proof
 	if !existence {
 		gp.OldKey = BytesToBigInt(oldKey)
 		gp.OldValue = BytesToBigInt(value)
-		gp.Fnc = big.NewInt(0)
-	} else {
-		// if the arbo proof is for an existing key, set the old key and value
-		// to 0
-		gp.Fnc = big.NewInt(1)
-		gp.OldKey = big.NewInt(0)
-		gp.OldValue = big.NewInt(0)
+		gp.Fnc = big.NewInt(1) // exclusion
 	}
-	// set the IsOld0 attribute to 1 if the is no old key, 0 otherwise
-	if len(oldKey) > 0 {
+
+	// set the IsOld0 attribute to 1 if there is no old key
+	if len(oldKey) == 0 {
 		gp.IsOld0 = big.NewInt(1)
-	} else {
-		gp.IsOld0 = big.NewInt(0)
 	}
 	return &gp, nil
 }
