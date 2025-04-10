@@ -3,6 +3,8 @@ package arbo
 import (
 	"bytes"
 	"fmt"
+	"log"
+	"math"
 	"math/big"
 	"slices"
 )
@@ -69,6 +71,7 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 	if err != nil {
 		return err
 	}
+	log.Println("AddBigInt", k, BytesToBigInt(bv))
 	// add it to the tree
 	if err := t.Add(bk, bv); err != nil {
 		return fmt.Errorf("raw key cannot be added: %w", err)
