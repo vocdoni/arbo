@@ -22,7 +22,7 @@ func (t *Tree) AddBatchBigInt(k []*big.Int, v [][]*big.Int) ([]Invalid, error) {
 	bvs := make([][]byte, len(k))
 	fbvs := make([][]byte, len(k))
 	for i, ki := range k {
-		bks[i], bvs[i], fbvs[i], err = encodeBigIntData(t.HashFunction(), t.MaxKeyLen(), ki, v[i])
+		bks[i], bvs[i], fbvs[i], err = bigIntsToLeaf(t.HashFunction(), t.MaxKeyLen(), ki, v[i])
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 		return fmt.Errorf("key cannot be nil")
 	}
 	// convert the big ints to bytes
-	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), t.MaxKeyLen(), k, v)
+	bk, bv, fbv, err := bigIntsToLeaf(t.HashFunction(), t.MaxKeyLen(), k, v)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func (t *Tree) UpdateBigInt(k *big.Int, value ...*big.Int) error {
 		return fmt.Errorf("key cannot be nil")
 	}
 	// convert the big ints to bytes
-	bk, bv, fbv, err := encodeBigIntData(t.HashFunction(), t.MaxKeyLen(), k, value)
+	bk, bv, fbv, err := bigIntsToLeaf(t.HashFunction(), t.MaxKeyLen(), k, value)
 	if err != nil {
 		return err
 	}
@@ -172,27 +172,18 @@ func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof
 // into a big.Int key and a slice of big.Int values, it gets the full value
 // from the valuesdb and checks if it matches the value of the leaf node. It
 // returns the original key and values or an error if the values don't match.
-func (t *Tree) leafToBigInts(key, value, fullValue []byte) (*big.Int, []*big.Int, error) {
+func (t *Tree) leafToBigInts(key, value, bigints []byte) (*big.Int, []*big.Int, error) {
 	// reverse the process of values encoding
-	values := fullValueToValues(fullValue)
-	// recalculate the value to check if it matches the stored value
-	expectedFullValue, err := valuesToFullValue(values)
-	if err != nil {
-		return nil, nil, err
-	}
-	// check if the value of the leaf node matches the stored value
-	if !bytes.Equal(expectedFullValue, fullValue) {
-		return nil, nil, fmt.Errorf("LeafToBigInt: expectedFullValue != value")
-	}
+	values := deserializeBigInts(bigints)
 	// reencode the leaf value of the tree to check if it matches the value
-	encodedValues, err := encodeBigIntValues(t.HashFunction(), values...)
+	bigintsHash, err := hashBigInts(t.HashFunction(), values...)
 	if err != nil {
 		return nil, nil, err
 	}
 	// check if the value of the leaf node matches the value used to build the
 	// tree
-	if !bytes.Equal(encodedValues, value) {
-		return nil, nil, fmt.Errorf("LeafToBigInt: encodedValues != value")
+	if !bytes.Equal(bigintsHash, value) {
+		return nil, nil, fmt.Errorf("LeafToBigInt: bigintsHash != value")
 	}
 	// convert the bytes of the key to a big.Int
 	return leafKeyToBigInt(key), values, nil
@@ -212,13 +203,13 @@ func bigIntToLeafKey(key *big.Int, maxLen int) []byte {
 	return BigIntToBytes(maxLen, key)
 }
 
-// valuesToFullValue converts a slice of big.Int values into the bytes of the
-// full value encoded in a reversible way. It concatenates the bytes of the
+// serializeBigInts converts a slice of big.Int values into the bytes of the
+// encoded in a reversible way. It concatenates the bytes of the
 // values with the length of each value at the beginning of each value.
-func valuesToFullValue(values []*big.Int) ([]byte, error) {
+func serializeBigInts(bigints []*big.Int) ([]byte, error) {
 	// calculate the bytes of the full values (should be reversible)
 	bFullValue := []byte{}
-	for _, v := range values {
+	for _, v := range bigints {
 		if v == nil {
 			return nil, fmt.Errorf("value cannot be nil")
 		}
@@ -232,13 +223,13 @@ func valuesToFullValue(values []*big.Int) ([]byte, error) {
 	return bFullValue, nil
 }
 
-// fullValueToValues converts the bytes of the full value encoded into a slice
-// of big.Int values. It iterates over the bytes of the full value and extracts
+// deserializeBigInts deserializes bigints encoded in bytes into a slice
+// of big.Int values. It iterates over the bytes and extracts
 // the length of each value and the bytes of the value to build the big.Int
 // values.
-func fullValueToValues(fullValue []byte) []*big.Int {
+func deserializeBigInts(bigints []byte) []*big.Int {
 	values := []*big.Int{}
-	iter := slices.Clone(fullValue)
+	iter := slices.Clone(bigints)
 	for len(iter) > 0 {
 		lenV := int(iter[0])
 		values = append(values, new(big.Int).SetBytes(iter[1:1+lenV]))
@@ -247,33 +238,33 @@ func fullValueToValues(fullValue []byte) []*big.Int {
 	return values
 }
 
-// encodeBigIntData converts a big.Int key and a slice of big.Int values into
+// bigIntsToLeaf converts a big.Int key and a slice of big.Int values into
 // the bytes of the key, the bytes of the value used to build the tree and the
 // bytes of the full value encoded
-func encodeBigIntData(hFn HashFunction, keyLen int, key *big.Int, values []*big.Int) ([]byte, []byte, []byte, error) {
+func bigIntsToLeaf(hFn HashFunction, keyLen int, key *big.Int, values []*big.Int) (
+	bKey []byte, bValue []byte, serializedBigInts []byte, err error,
+) {
 	if key == nil {
 		return nil, nil, nil, fmt.Errorf("key cannot be nil")
 	}
 	// calculate the bytes of the key
-	// bKey := hFn.SafeBigInt(key)
-	bKey := bigIntToLeafKey(key, keyLen)
+	bKey = bigIntToLeafKey(key, keyLen)
 	// calculate the bytes of the full values (should be reversible)
-	bFullValue, err := valuesToFullValue(values)
+	serializedBigInts, err = serializeBigInts(values)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	// calculate the value used to build the tree
-	bValue, err := encodeBigIntValues(hFn, values...)
+	bValue, err = hashBigInts(hFn, values...)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	return bKey, bValue, bFullValue, nil
+	return bKey, bValue, serializedBigInts, nil
 }
 
-// encodeBigIntValues converts a slice of big.Int values into the bytes of the
-// value used to build the tree. It hashes the bytes of the big.Int values
-// using the hash function of the tree.
-func encodeBigIntValues(hFn HashFunction, values ...*big.Int) ([]byte, error) {
+// hashBigInts hashes the bytes of the big.Int values
+// using the hash function of the tree. The resulting hash can be used as the leaf value
+func hashBigInts(hFn HashFunction, values ...*big.Int) ([]byte, error) {
 	chunks := make([][]byte, len(values))
 	for _, v := range values {
 		value := hFn.SafeBigInt(v)
