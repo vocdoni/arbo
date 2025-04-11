@@ -1,8 +1,7 @@
 module github.com/vocdoni/arbo
 
-go 1.23.2
+go 1.24
 
-toolchain go1.23.4
 
 require (
 	github.com/consensys/gnark-crypto v0.16.1-0.20250217214835-5ed804970f85
