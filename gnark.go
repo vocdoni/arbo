@@ -38,7 +38,7 @@ func (t *Tree) GenerateGnarkVerifierProof(k []byte) (*GnarkVerifierProof, error)
 	if err != nil {
 		return nil, err
 	}
-	// convert the siblings to big.Int swaping the endianess
+	// convert the siblings to big.Int swapping the endianess
 	bigSiblings := make([]*big.Int, len(unpackedSiblings))
 	for i := range bigSiblings {
 		bigSiblings[i] = BytesToBigInt(unpackedSiblings[i])
