@@ -927,13 +927,17 @@ func (t *Tree) UpdateWithTx(wTx db.WriteTx, k, v []byte) error {
 // GenProof generates a MerkleTree proof for the given key. The leaf value is
 // returned, together with the packed siblings of the proof, and a boolean
 // parameter that indicates if the proof is of existence (true) or not (false).
-func (t *Tree) GenProof(k []byte) ([]byte, []byte, []byte, bool, error) {
+func (t *Tree) GenProof(k []byte) (
+	leafKey []byte, leafValue []byte, siblings []byte, existence bool, err error,
+) {
 	return t.GenProofWithTx(t.treedb, k)
 }
 
 // GenProofWithTx does the same than the GenProof method, but allowing to pass
 // the db.ReadTx that is used.
-func (t *Tree) GenProofWithTx(rTx db.Reader, k []byte) ([]byte, []byte, []byte, bool, error) {
+func (t *Tree) GenProofWithTx(rTx db.Reader, k []byte) (
+	leafKey []byte, leafValue []byte, siblings []byte, existence bool, err error,
+) {
 	keyPath, err := keyPathFromKey(t.maxLevels, k)
 	if err != nil {
 		return nil, nil, nil, false, err
@@ -946,24 +950,23 @@ func (t *Tree) GenProofWithTx(rTx db.Reader, k []byte) ([]byte, []byte, []byte, 
 	}
 
 	// go down to the leaf
-	var siblings [][]byte
-	_, value, siblings, err := t.down(rTx, k, root, siblings, path, 0, true)
+	var unpacked [][]byte
+	_, value, unpacked, err := t.down(rTx, k, root, unpacked, path, 0, true)
 	if err != nil {
 		return nil, nil, nil, false, err
 	}
 
-	s, err := PackSiblings(t.hashFunction, siblings)
-	if err != nil {
+	if siblings, err = PackSiblings(t.hashFunction, unpacked); err != nil {
 		return nil, nil, nil, false, err
 	}
 
 	leafK, leafV := ReadLeafValue(value)
 	if !bytes.Equal(k, leafK) {
 		// key not in tree, proof of non-existence
-		return leafK, leafV, s, false, nil
+		return leafK, leafV, siblings, false, nil
 	}
 
-	return leafK, leafV, s, true, nil
+	return leafK, leafV, siblings, true, nil
 }
 
 // PackSiblings packs the siblings into a byte array.

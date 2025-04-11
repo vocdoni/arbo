@@ -112,7 +112,9 @@ func (t *Tree) UpdateBigInt(key *big.Int, bigints ...*big.Int) error {
 // node as a slice of big.Ints. It encodes the key as bytes and gets the leaf
 // node from the tree, then it decodes the serialized bigints of the leaf node and
 // returns the key and the values or an error if something fails.
-func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
+func (t *Tree) GetBigInt(k *big.Int) (
+	key *big.Int, bigints []*big.Int, err error,
+) {
 	// acquire lock to wait for atomic updates to treedb and valuesdb to finish
 	t.valuesdbMu.RLock()
 	defer t.valuesdbMu.RUnlock()
@@ -135,12 +137,13 @@ func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
 // big.Int key into bytes and generates a proof for the key, then it returns
 // the key, the value of the leaf node, the siblings and a boolean indicating
 // if the key exists or an error if something fails.
-func (t *Tree) GenProofBigInts(k *big.Int) ([]byte, []byte, []byte, bool, error) {
-	if k == nil {
+func (t *Tree) GenProofBigInts(key *big.Int) (
+	leafKey []byte, leafValue []byte, siblings []byte, existence bool, err error,
+) {
+	if key == nil {
 		return nil, nil, nil, false, fmt.Errorf("key cannot be nil")
 	}
-
-	bk := bigIntToLeafKey(k, t.MaxKeyLen())
+	bk := bigIntToLeafKey(key, t.MaxKeyLen())
 	return t.GenProof(bk)
 }
 
@@ -172,9 +175,11 @@ func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof
 // into a big.Int key and a slice of big.Int values, it gets the serialized bigints
 // from the valuesdb and checks if it matches the value of the leaf node. It
 // returns the original key and values or an error if the values don't match.
-func (t *Tree) leafToBigInts(key, value, serializedBigInts []byte) (*big.Int, []*big.Int, error) {
+func (t *Tree) leafToBigInts(bkey, value, serializedBigInts []byte) (
+	key *big.Int, bigints []*big.Int, err error,
+) {
 	// reverse the process of bigints encoding
-	bigints := deserializeBigInts(serializedBigInts)
+	bigints = deserializeBigInts(serializedBigInts)
 	// reencode the leaf value of the tree to check if it matches the value
 	bigintsHash, err := HashBigInts(t.HashFunction(), bigints...)
 	if err != nil {
@@ -186,7 +191,7 @@ func (t *Tree) leafToBigInts(key, value, serializedBigInts []byte) (*big.Int, []
 		return nil, nil, fmt.Errorf("LeafToBigInt: bigintsHash != value")
 	}
 	// convert the bytes of the key to a big.Int
-	return leafKeyToBigInt(key), bigints, nil
+	return leafKeyToBigInt(bkey), bigints, nil
 }
 
 // leafKeyToBigInt converts the bytes of a key into a big.Int.
