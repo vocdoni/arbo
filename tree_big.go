@@ -7,8 +7,6 @@ import (
 	"slices"
 )
 
-
-
 // AddBatchBigInt adds a batch of key-value pairs to the tree, it converts the
 // big.Int keys and the slices of big.Int values into bytes and adds them to
 // the tree. It locks the tree to prevent concurrent writes to the valuesdb and
@@ -29,13 +27,13 @@ func (t *Tree) AddBatchBigInt(k []*big.Int, v [][]*big.Int) ([]Invalid, error) {
 			return nil, err
 		}
 	}
+	// acquire lock to make an atomic update to treedb and valuesdb
+	t.valuesdbMu.Lock()
+	defer t.valuesdbMu.Unlock()
 	// add the keys and leaf values in batch
 	if invalids, err := t.AddBatch(bks, bvs); err != nil {
 		return invalids, err
 	}
-	// lock the tree to prevent concurrent writes to the valuesdb
-	t.Lock()
-	defer t.Unlock()
 	// create a transaction for each group of keys and full values and store
 	// the errors in a slice to return them
 	var fullInvalids []Invalid
@@ -63,13 +61,13 @@ func (t *Tree) AddBigInt(k *big.Int, v ...*big.Int) error {
 	if err != nil {
 		return err
 	}
+	// acquire lock to make an atomic update to treedb and valuesdb
+	t.valuesdbMu.Lock()
+	defer t.valuesdbMu.Unlock()
 	// add it to the tree
 	if err := t.Add(bk, bv); err != nil {
 		return fmt.Errorf("raw key cannot be added: %w", err)
 	}
-	// lock the tree to prevent concurrent writes to the valuesdb
-	t.Lock()
-	defer t.Unlock()
 	// create a transaction to store the full value
 	wTx := t.valuesdb.WriteTx()
 	defer wTx.Discard()
@@ -93,13 +91,13 @@ func (t *Tree) UpdateBigInt(k *big.Int, value ...*big.Int) error {
 	if err != nil {
 		return err
 	}
+	// acquire lock to make an atomic update to treedb and valuesdb
+	t.valuesdbMu.Lock()
+	defer t.valuesdbMu.Unlock()
 	// update the leaf in the tree
 	if err := t.Update(bk, bv); err != nil {
 		return err
 	}
-	// lock the tree to prevent concurrent writes to the valuesdb
-	t.Lock()
-	defer t.Unlock()
 	// create a transaction to store the full value
 	wTx := t.valuesdb.WriteTx()
 	defer wTx.Discard()
@@ -115,6 +113,9 @@ func (t *Tree) UpdateBigInt(k *big.Int, value ...*big.Int) error {
 // node from the tree, then it decodes the full value of the leaf node and
 // returns the key and the values or an error if something fails.
 func (t *Tree) GetBigInt(k *big.Int) (*big.Int, []*big.Int, error) {
+	// acquire lock to wait for atomic updates to treedb and valuesdb to finish
+	t.valuesdbMu.RLock()
+	defer t.valuesdbMu.RUnlock()
 	if k == nil {
 		return nil, nil, fmt.Errorf("key cannot be nil")
 	}

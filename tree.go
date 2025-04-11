@@ -93,8 +93,10 @@ var (
 type Tree struct {
 	sync.Mutex
 
-	treedb    db.Database
-	valuesdb  db.Database
+	treedb     db.Database
+	valuesdb   db.Database
+	valuesdbMu sync.RWMutex
+
 	maxLevels int
 	// thresholdNLeafs defines the threshold number of leafs in the tree
 	// that determines if AddBatch will work in memory or in disk.  It is
