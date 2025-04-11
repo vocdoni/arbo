@@ -1,6 +1,9 @@
 package arbo
 
-import "math/big"
+import (
+	"math"
+	"math/big"
+)
 
 // SwapEndianness swaps the order of the bytes in the byte slice.
 func SwapEndianness(b []byte) []byte {
@@ -33,4 +36,12 @@ func ExplicitZero(b []byte) []byte {
 		return []byte{0}
 	}
 	return b
+}
+
+// MaxKeyLen returns the maximum length of the key in bytes. It is calculated
+// as the minimum between the length of the hash function provided and the
+// number of levels in a tree provided divided by 8. This is used to limit the
+// size of the keys in a tree.
+func MaxKeyLen(levels, hashLen int) int {
+	return min(int(math.Ceil(float64(levels)/float64(8))), hashLen)
 }

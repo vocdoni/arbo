@@ -194,6 +194,13 @@ func (t *Tree) HashFunction() HashFunction {
 	return t.hashFunction
 }
 
+// MaxKeyLen returns the maximum length of the key in bytes for the current
+// tree. It is calculated as the minimum between the length of the hash
+// function used and the number of levels in the tree divided by 8.
+func (t *Tree) MaxKeyLen() int {
+	return MaxKeyLen(t.maxLevels, t.HashFunction().Len())
+}
+
 // editable returns true if the tree is editable, and false when is not
 // editable (because is a snapshot tree)
 func (t *Tree) editable() bool {
