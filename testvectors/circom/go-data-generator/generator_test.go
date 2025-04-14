@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"math/big"
 	"os"
@@ -8,16 +9,16 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/vocdoni/arbo"
-	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/pebbledb"
+	"github.com/vocdoni/arbo/memdb"
 )
 
 func TestGenerator(t *testing.T) {
 	c := qt.New(t)
-	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
-	c.Assert(err, qt.IsNil)
-	tree, err := arbo.NewTree(arbo.Config{Database: database, MaxLevels: 4,
-		HashFunction: arbo.HashFunctionPoseidon})
+	tree, err := arbo.NewTree(arbo.Config{
+		Database:     memdb.New(),
+		MaxLevels:    160,
+		HashFunction: arbo.HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	testVector := [][]int64{
@@ -27,7 +28,7 @@ func TestGenerator(t *testing.T) {
 		{4, 44},
 	}
 	bLen := 1
-	for i := 0; i < len(testVector); i++ {
+	for i := range testVector {
 		k := arbo.BigIntToBytes(bLen, big.NewInt(testVector[i][0]))
 		v := arbo.BigIntToBytes(bLen, big.NewInt(testVector[i][1]))
 		if err := tree.Add(k, v); err != nil {
@@ -42,7 +43,7 @@ func TestGenerator(t *testing.T) {
 	jCvp, err := json.Marshal(cvp)
 	c.Assert(err, qt.IsNil)
 	// store the data into a file that will be used at the circom test
-	err = os.WriteFile("go-smt-verifier-inputs.json", jCvp, 0600)
+	err = os.WriteFile("go-smt-verifier-inputs.json", jCvp, 0o600)
 	c.Assert(err, qt.IsNil)
 
 	// proof of non-existence
@@ -52,6 +53,34 @@ func TestGenerator(t *testing.T) {
 	jCvp, err = json.Marshal(cvp)
 	c.Assert(err, qt.IsNil)
 	// store the data into a file that will be used at the circom test
-	err = os.WriteFile("go-smt-verifier-non-existence-inputs.json", jCvp, 0600)
+	err = os.WriteFile("go-smt-verifier-non-existence-inputs.json", jCvp, 0o600)
+	c.Assert(err, qt.IsNil)
+
+	// create a new tree with big.Int keys
+	bigtree, err := arbo.NewTree(arbo.Config{
+		Database:     memdb.New(),
+		MaxLevels:    160,
+		HashFunction: arbo.HashFunctionPoseidon,
+	})
+	c.Assert(err, qt.IsNil)
+	// add 100 elements to the tree
+	var bk *big.Int
+	for i := range 100 {
+		k, err := rand.Int(rand.Reader, big.NewInt(100_000_000_000))
+		c.Assert(err, qt.IsNil)
+		v := new(big.Int).Mul(k, big.NewInt(2))
+		c.Assert(bigtree.AddBigInt(k, v), qt.IsNil)
+
+		if i == 0 {
+			bk = k
+		}
+	}
+	// generate a proof of existence for the first key
+	cvp, err = tree.GenerateCircomVerifierProofBigInt(bk)
+	c.Assert(err, qt.IsNil)
+	jCvp, err = json.Marshal(cvp)
+	c.Assert(err, qt.IsNil)
+	// store the data into a file that will be used at the circom test
+	err = os.WriteFile("go-smt-verifier-big-inputs.json", jCvp, 0o600)
 	c.Assert(err, qt.IsNil)
 }

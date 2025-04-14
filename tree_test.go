@@ -73,10 +73,12 @@ func TestAddTestVectors(t *testing.T) {
 func testAdd(c *qt.C, hashFunc HashFunction, testVectors []string) {
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: hashFunc})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: hashFunc,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	root, err := tree.Root()
 	c.Assert(err, qt.IsNil)
@@ -106,10 +108,12 @@ func TestAddBatch(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	for i := 0; i < 1000; i++ {
@@ -125,10 +129,12 @@ func TestAddBatch(t *testing.T) {
 
 	database, err = pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree2, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree2, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree2.db.Close() //nolint:errcheck
+	defer tree2.treedb.Close() //nolint:errcheck
 
 	var keys, values [][]byte
 	for i := 0; i < 1000; i++ {
@@ -149,10 +155,12 @@ func TestAddDifferentOrder(t *testing.T) {
 	c := qt.New(t)
 	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree1, err := NewTree(Config{Database: database1, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree1, err := NewTree(Config{
+		Database: database1, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree1.db.Close() //nolint:errcheck
+	defer tree1.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	for i := 0; i < 16; i++ {
@@ -165,10 +173,12 @@ func TestAddDifferentOrder(t *testing.T) {
 
 	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree2, err := NewTree(Config{Database: database2, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree2, err := NewTree(Config{
+		Database: database2, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree2.db.Close() //nolint:errcheck
+	defer tree2.treedb.Close() //nolint:errcheck
 
 	for i := 16 - 1; i >= 0; i-- {
 		k := BigIntToBytes(bLen, big.NewInt(int64(i)))
@@ -191,10 +201,12 @@ func TestAddRepeatedIndex(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	k := BigIntToBytes(bLen, big.NewInt(int64(3)))
@@ -210,10 +222,12 @@ func TestUpdate(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	k := BigIntToBytes(bLen, big.NewInt(int64(20)))
@@ -264,10 +278,12 @@ func TestAux(t *testing.T) { // TODO split in proper tests
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	k := BigIntToBytes(bLen, big.NewInt(int64(1)))
@@ -304,10 +320,12 @@ func TestGet(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	for i := 0; i < 10; i++ {
@@ -330,17 +348,21 @@ func TestBitmapBytes(t *testing.T) {
 
 	b := []byte{15}
 	bits := bytesToBitmap(b)
-	c.Assert(bits, qt.DeepEquals, []bool{true, true, true, true,
-		false, false, false, false})
+	c.Assert(bits, qt.DeepEquals, []bool{
+		true, true, true, true,
+		false, false, false, false,
+	})
 	b2 := bitmapToBytes(bits)
 	c.Assert(b2, qt.DeepEquals, b)
 
 	b = []byte{0, 15, 50}
 	bits = bytesToBitmap(b)
-	c.Assert(bits, qt.DeepEquals, []bool{false, false, false,
+	c.Assert(bits, qt.DeepEquals, []bool{
+		false, false, false,
 		false, false, false, false, false, true, true, true, true,
 		false, false, false, false, false, true, false, false, true,
-		true, false, false})
+		true, false, false,
+	})
 	b2 = bitmapToBytes(bits)
 	c.Assert(b2, qt.DeepEquals, b)
 
@@ -429,13 +451,15 @@ func TestGenProofAndVerify(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
-	for i := 0; i < 10; i++ {
+	for i := range 1000 {
 		k := BigIntToBytes(bLen, big.NewInt(int64(i)))
 		v := BigIntToBytes(bLen, big.NewInt(int64(i*2)))
 		if err := tree.Add(k, v); err != nil {
@@ -470,10 +494,12 @@ func testDumpAndImportDump(t *testing.T, inFile bool) {
 	c := qt.New(t)
 	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree1, err := NewTree(Config{Database: database1, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree1, err := NewTree(Config{
+		Database: database1, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree1.db.Close() //nolint:errcheck
+	defer tree1.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	for i := 0; i < 16; i++ {
@@ -499,10 +525,12 @@ func testDumpAndImportDump(t *testing.T, inFile bool) {
 
 	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree2, err := NewTree(Config{Database: database2, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree2, err := NewTree(Config{
+		Database: database2, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree2.db.Close() //nolint:errcheck
+	defer tree2.treedb.Close() //nolint:errcheck
 
 	if inFile {
 		f, err := os.Open(filepath.Clean(fileName))
@@ -527,10 +555,12 @@ func TestRWMutex(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	var keys, values [][]byte
@@ -611,14 +641,18 @@ func TestAddBatchFullyUsed(t *testing.T) {
 
 	database1, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree1, err := NewTree(Config{Database: database1, MaxLevels: 4,
-		HashFunction: HashFunctionPoseidon})
+	tree1, err := NewTree(Config{
+		Database: database1, MaxLevels: 4,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	database2, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree2, err := NewTree(Config{Database: database2, MaxLevels: 4,
-		HashFunction: HashFunctionPoseidon})
+	tree2, err := NewTree(Config{
+		Database: database2, MaxLevels: 4,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	var keys, values [][]byte
@@ -672,8 +706,10 @@ func TestSetRoot(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	expectedRoot := "13742386369878513332697380582061714160370929283209286127733983161245560237407"
@@ -729,8 +765,10 @@ func TestSnapshot(t *testing.T) {
 	c := qt.New(t)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
 
 	// fill the tree
@@ -780,10 +818,12 @@ func TestGetFromSnapshotExpectArboErrKeyNotFound(t *testing.T) {
 
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 256,
-		HashFunction: HashFunctionPoseidon})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 256,
+		HashFunction: HashFunctionPoseidon,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	bLen := 32
 	k := BigIntToBytes(bLen, big.NewInt(int64(3)))
@@ -803,8 +843,10 @@ func TestKeyLen(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	// maxLevels is 100, keyPath length = ceil(maxLevels/8) = 13
 	maxLevels := 100
-	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: maxLevels,
+		HashFunction: HashFunctionBlake2b,
+	})
 	c.Assert(err, qt.IsNil)
 
 	// expect no errors when adding a key of only 4 bytes (when the
@@ -836,8 +878,10 @@ func TestKeyLen(t *testing.T) {
 	maxLevels = 32
 	database, err = pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err = NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+	tree, err = NewTree(Config{
+		Database: database, MaxLevels: maxLevels,
+		HashFunction: HashFunctionBlake2b,
+	})
 	c.Assert(err, qt.IsNil)
 
 	maxKeyLen := int(math.Ceil(float64(maxLevels) / float64(8))) //nolint:gomnd
@@ -907,8 +951,10 @@ func TestKeyLenBiggerThan32(t *testing.T) {
 	maxLevels := 264
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: maxLevels,
-		HashFunction: HashFunctionBlake2b})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: maxLevels,
+		HashFunction: HashFunctionBlake2b,
+	})
 	c.Assert(err, qt.IsNil)
 
 	bLen := 33
@@ -950,10 +996,12 @@ func benchmarkAdd(b *testing.B, hashFunc HashFunction, ks, vs [][]byte) {
 	c := qt.New(b)
 	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
 	c.Assert(err, qt.IsNil)
-	tree, err := NewTree(Config{Database: database, MaxLevels: 140,
-		HashFunction: hashFunc})
+	tree, err := NewTree(Config{
+		Database: database, MaxLevels: 140,
+		HashFunction: hashFunc,
+	})
 	c.Assert(err, qt.IsNil)
-	defer tree.db.Close() //nolint:errcheck
+	defer tree.treedb.Close() //nolint:errcheck
 
 	for i := 0; i < len(ks); i++ {
 		if err := tree.Add(ks[i], vs[i]); err != nil {

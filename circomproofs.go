@@ -20,7 +20,7 @@ type CircomVerifierProof struct {
 
 // MarshalJSON implements the JSON marshaler
 func (cvp CircomVerifierProof) MarshalJSON() ([]byte, error) {
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 
 	m["root"] = BytesToBigInt(cvp.Root).String()
 	m["siblings"] = siblingsToStringArray(cvp.Siblings)
@@ -40,7 +40,7 @@ func (cvp CircomVerifierProof) MarshalJSON() ([]byte, error) {
 
 func siblingsToStringArray(s [][]byte) []string {
 	var r []string
-	for i := 0; i < len(s); i++ {
+	for i := range s {
 		r = append(r, BytesToBigInt(s[i]).String())
 	}
 	return r
