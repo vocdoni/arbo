@@ -7,7 +7,9 @@ import (
 	fr_bls12377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr"
 	mimc_bls12_377 "github.com/consensys/gnark-crypto/ecc/bls12-377/fr/mimc"
 	mimc_bn254 "github.com/consensys/gnark-crypto/ecc/bn254/fr/mimc"
+	poseidon2 "github.com/consensys/gnark-crypto/ecc/bn254/fr/poseidon2"
 	"github.com/consensys/gnark-crypto/hash"
+
 	"github.com/iden3/go-iden3-crypto/mimc7"
 	"github.com/iden3/go-iden3-crypto/poseidon"
 	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/crypto/hash/poseidon"
@@ -33,6 +35,8 @@ var (
 	TypeHashMiMC_BN254 = []byte("mimc_bn254")
 	// TypeHashMimc7 represents the label for the HashFunction of Mimc7
 	TypeHashMimc7 = []byte("mimc7")
+	// TypeHashPoseidon2 identifies the Poseidon2-BN254 hash
+	TypeHashPoseidon2 = []byte("poseidon2")
 
 	// HashFunctionSha256 contains the HashSha256 struct which implements
 	// the HashFunction interface
@@ -55,6 +59,8 @@ var (
 	// HashFunctionMimc7 contains the HashMiMC7 struct which implements the
 	// HashFunction interface
 	HashFunctionMimc7 HashMiMC7
+	// HashFunctionPoseidon2 is the ready-to-use implementation
+	HashFunctionPoseidon2 HashPoseidon2
 )
 
 // Once Generics are at Go, this will be updated (August 2021
@@ -378,4 +384,43 @@ func (f HashMiMC7) SafeBigInt(b *big.Int) []byte {
 	safeBigInt := BigToFF(BN254BaseField, b)
 	arboBytes := BigIntToBytes(f.Len(), safeBigInt)
 	return ExplicitZero(arboBytes)
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+//  Poseidon2 implementation (BN254, Merkle–Damgård, 32-byte digest)
+// ────────────────────────────────────────────────────────────────────────────────
+
+// HashPoseidon2 implements the HashFunction interface using the
+// gnark-crypto Poseidon2 permutation in Merkle-Damgård mode
+// (width = 2, rF = 6, rP = 50).
+type HashPoseidon2 struct{}
+
+// Type returns the function label.
+func (HashPoseidon2) Type() []byte { return TypeHashPoseidon2 }
+
+// Len returns the byte length of the digest (one BN254 field element).
+func (HashPoseidon2) Len() int { return 32 }
+
+// Hash concatenates the inputs and hashes them with Poseidon2.
+// Each Write call handles its own padding; no chunking is required here.
+func (f HashPoseidon2) Hash(b ...[]byte) ([]byte, error) {
+	h := poseidon2.NewMerkleDamgardHasher() // implements hash.Hash
+	for _, in := range b {
+		if _, err := h.Write(f.SafeValue(in)); err != nil {
+			return nil, err
+		}
+	}
+	return h.Sum(nil), nil // 32-byte digest
+}
+
+// SafeValue converts an arbitrary little-endian byte slice to a
+// canonical BN254 field-element encoding.
+func (f HashPoseidon2) SafeValue(b []byte) []byte {
+	return f.SafeBigInt(new(big.Int).SetBytes(b))
+}
+
+// SafeBigInt converts an arbitrary big.Int into a byte slice that is a
+// valid BN254 base-field element in little-endian form.
+func (HashPoseidon2) SafeBigInt(b *big.Int) []byte {
+	return ExplicitZero(BigToFF(BN254BaseField, b).Bytes())
 }

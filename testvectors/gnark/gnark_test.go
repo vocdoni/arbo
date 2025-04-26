@@ -15,6 +15,7 @@ import (
 	"github.com/vocdoni/gnark-crypto-primitives/hash/bn254/poseidon"
 	garbo "github.com/vocdoni/gnark-crypto-primitives/tree/arbo"
 	gsmt "github.com/vocdoni/gnark-crypto-primitives/tree/smt"
+	"github.com/vocdoni/gnark-crypto-primitives/utils"
 )
 
 const nLevels = 160
@@ -27,7 +28,7 @@ type testCircuitArbo struct {
 }
 
 func (circuit *testCircuitArbo) Define(api frontend.API) error {
-	return garbo.CheckInclusionProof(api, poseidon.MultiHash, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
+	return garbo.CheckInclusionProof(api, utils.Poseidon2Hasher, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
 }
 
 func TestGnarkArboVerifier(t *testing.T) {
@@ -35,7 +36,7 @@ func TestGnarkArboVerifier(t *testing.T) {
 	tree, err := arbo.NewTree(arbo.Config{
 		Database:     memdb.New(),
 		MaxLevels:    nLevels,
-		HashFunction: arbo.HashFunctionMultiPoseidon,
+		HashFunction: arbo.HashFunctionPoseidon2,
 	})
 	c.Assert(err, qt.IsNil)
 
