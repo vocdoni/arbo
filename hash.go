@@ -403,7 +403,22 @@ func (HashPoseidon2) Len() int { return 32 }
 
 // Hash concatenates the inputs and hashes them with Poseidon2.
 // Each Write call handles its own padding; no chunking is required here.
+// Normalizes the order of inputs to ensure consistent hashing regardless
+// of the order in which values are provided.
 func (f HashPoseidon2) Hash(b ...[]byte) ([]byte, error) {
+	// For Merkle intermediate nodes, we have exactly 2 inputs
+	if len(b) == 2 {
+		// Convert both inputs to big.Int for deterministic comparison
+		bigA := new(big.Int).SetBytes(b[0])
+		bigB := new(big.Int).SetBytes(b[1])
+
+		// Compare and consistently order the inputs
+		if bigA.Cmp(bigB) > 0 {
+			// Swap if a > b to ensure consistent ordering
+			b[0], b[1] = b[1], b[0]
+		}
+	}
+
 	h := poseidon2.NewMerkleDamgardHasher() // implements hash.Hash
 	for _, in := range b {
 		if _, err := h.Write(f.SafeValue(in)); err != nil {
