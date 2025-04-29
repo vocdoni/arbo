@@ -13,12 +13,10 @@ import (
 	"github.com/vocdoni/arbo"
 	"github.com/vocdoni/arbo/memdb"
 	"github.com/vocdoni/gnark-crypto-primitives/hash/bn254/poseidon"
-	garbo "github.com/vocdoni/gnark-crypto-primitives/tree/arbo"
 	gsmt "github.com/vocdoni/gnark-crypto-primitives/tree/smt"
-	"github.com/vocdoni/gnark-crypto-primitives/utils"
 )
 
-const nLevels = 160
+const nLevels = 64
 
 type testCircuitArbo struct {
 	Root     frontend.Variable
@@ -28,7 +26,8 @@ type testCircuitArbo struct {
 }
 
 func (circuit *testCircuitArbo) Define(api frontend.API) error {
-	return garbo.CheckInclusionProof(api, utils.Poseidon2Hasher, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
+	gsmt.InclusionVerifier(api, poseidon.Hash, circuit.Root, circuit.Siblings[:], circuit.Key, circuit.Value)
+	return nil
 }
 
 func TestGnarkArboVerifier(t *testing.T) {
@@ -36,7 +35,7 @@ func TestGnarkArboVerifier(t *testing.T) {
 	tree, err := arbo.NewTree(arbo.Config{
 		Database:     memdb.New(),
 		MaxLevels:    nLevels,
-		HashFunction: arbo.HashFunctionPoseidon2,
+		HashFunction: arbo.HashFunctionPoseidon,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -72,7 +71,7 @@ func TestGnarkArboVerifier(t *testing.T) {
 		Root:     proof.Root,
 		Key:      proof.Key,
 		Value:    proof.Value,
-		Siblings: [160]frontend.Variable(paddedSiblings),
+		Siblings: [nLevels]frontend.Variable(paddedSiblings),
 	}, test.WithCurves(ecc.BN254), test.WithBackends(backend.GROTH16))
 }
 
@@ -129,6 +128,6 @@ func TestGnarkSMTVerifier(t *testing.T) {
 		Root:     proof.Root,
 		Key:      proof.Key,
 		Value:    proof.Value,
-		Siblings: [160]frontend.Variable(paddedSiblings),
+		Siblings: [nLevels]frontend.Variable(paddedSiblings),
 	}, test.WithCurves(ecc.BN254), test.WithBackends(backend.GROTH16))
 }

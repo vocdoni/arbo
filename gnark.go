@@ -1,6 +1,10 @@
 package arbo
 
-import "math/big"
+import (
+	"math/big"
+
+	"go.vocdoni.io/dvote/tree/arbo"
+)
 
 // GnarkVerifierProof is a struct that contains all the information needed to
 // verify a proof in a gnark circuit. The attributes are all big.Int, so they
@@ -18,53 +22,70 @@ type GnarkVerifierProof struct {
 	Fnc      *big.Int
 }
 
-// GenerateGnarkVerifierProof generates a GnarkVerifierProof for a given key
-// in the Tree. Every attribute is a big.Int, so it can be used in the gnark
-// circuit as frontend.Variable's. The endianess of root, siblings and value
-// has been changed to Little-Endian to match the gnark arbo verifier.
-func (t *Tree) GenerateGnarkVerifierProof(k []byte) (*GnarkVerifierProof, error) {
-	// generate the arbo proof
-	oldKey, value, siblings, existence, err := t.GenProof(k)
+// GenerateGnarkVerifierProofLE builds a proof whose Root, Siblings and Value
+// are **little-endian**, matching the arbo Poseidon-2 circuit.
+func (t *Tree) GenerateGnarkVerifierProofLE(keyBE []byte) (*GnarkVerifierProof, error) {
+	return t.genVerifierProof(keyBE, arbo.BytesLEToBigInt)
+}
+
+// GenerateGnarkVerifierProofBE builds an equivalent proof but keeps the
+// canonical **big-endian** encoding (handy for off-chain checks & logs).
+func (t *Tree) GenerateGnarkVerifierProofBE(keyBE []byte) (*GnarkVerifierProof, error) {
+	return t.genVerifierProof(keyBE, BytesToBigInt)
+}
+
+// genVerifierProof contains the full algorithm; the only difference between
+// LE / BE variants is the `conv` function used to turn each byte slice into a
+// *big.Int*.  No other logic diverges.
+func (t *Tree) genVerifierProof(
+	keyBE []byte,
+	conv func([]byte) *big.Int, // endian-aware byte-slice → big.Int
+) (*GnarkVerifierProof, error) {
+
+	// 1. build the sparse-Merkle proof through arbo
+	oldKey, value, sibPacked, exists, err := t.GenProof(keyBE)
 	if err != nil && err != ErrKeyNotFound {
 		return nil, err
 	}
-	// get the root of the tree
-	root, err := t.Root()
+
+	// 2. current tree root
+	rootBE, err := t.Root()
 	if err != nil {
 		return nil, err
 	}
-	// unpack the siblings
-	unpackedSiblings, err := UnpackSiblings(t.hashFunction, siblings)
+
+	// 3. unpack and convert each sibling
+	unpacked, err := UnpackSiblings(t.hashFunction, sibPacked)
 	if err != nil {
 		return nil, err
 	}
-	// convert the siblings to big.Int swapping the endianess
-	bigSiblings := make([]*big.Int, len(unpackedSiblings))
-	for i := range bigSiblings {
-		bigSiblings[i] = BytesToBigInt(unpackedSiblings[i])
+	siblings := make([]*big.Int, len(unpacked))
+	for i := range unpacked {
+		siblings[i] = conv(unpacked[i])
 	}
-	// initialize the GnarkVerifierProof
-	gp := GnarkVerifierProof{
-		Root:     BytesToBigInt(root),
-		Key:      BytesToBigInt(k),
-		Value:    BytesToBigInt(value),
-		Siblings: bigSiblings,
+
+	// 4. assemble the witness
+	proof := &GnarkVerifierProof{
+		Root:     conv(rootBE),
+		Key:      conv(keyBE),
+		Value:    conv(value),
+		Siblings: siblings,
+
+		// default for inclusion
 		OldKey:   big.NewInt(0),
 		OldValue: big.NewInt(0),
 		IsOld0:   big.NewInt(0),
-		Fnc:      big.NewInt(0), // inclusion
-	}
-	// if the arbo proof is for a non-existing key, set the old key and value
-	// to the key and value of the proof
-	if !existence {
-		gp.OldKey = BytesToBigInt(oldKey)
-		gp.OldValue = BytesToBigInt(value)
-		gp.Fnc = big.NewInt(1) // exclusion
+		Fnc:      big.NewInt(0),
 	}
 
-	// set the IsOld0 attribute to 1 if there is no old key
-	if len(oldKey) == 0 {
-		gp.IsOld0 = big.NewInt(1)
+	// 5. adjust flags for exclusion proofs
+	if !exists {
+		proof.OldKey = conv(oldKey)
+		proof.OldValue = conv(value)
+		proof.Fnc = big.NewInt(1) // exclusion
 	}
-	return &gp, nil
+	if len(oldKey) == 0 {
+		proof.IsOld0 = big.NewInt(1)
+	}
+	return proof, nil
 }

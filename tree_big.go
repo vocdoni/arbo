@@ -168,7 +168,7 @@ func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof
 		return nil, fmt.Errorf("key cannot be nil")
 	}
 	bk := bigIntToLeafKey(k, t.MaxKeyLen())
-	return t.GenerateGnarkVerifierProof(bk)
+	return t.GenerateGnarkVerifierProofLE(bk)
 }
 
 // leafToBigInts converts the bytes of the key and the value of a leaf node

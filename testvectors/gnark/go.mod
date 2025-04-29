@@ -6,8 +6,8 @@ require (
 	github.com/consensys/gnark v0.12.1-0.20250417131611-fdeeb39f3a62
 	github.com/consensys/gnark-crypto v0.17.1-0.20250415133755-1873045cbd7d
 	github.com/frankban/quicktest v1.14.6
-	github.com/vocdoni/arbo v0.0.0-20241216103934-e64315269b49
-	github.com/vocdoni/gnark-crypto-primitives v0.0.2-0.20250427214622-8b2332f9feed
+	github.com/vocdoni/arbo v0.0.0-20250429134936-21b6eda5d59a
+	github.com/vocdoni/gnark-crypto-primitives v0.0.2-0.20250429135323-8566075e1249
 )
 
 require (
