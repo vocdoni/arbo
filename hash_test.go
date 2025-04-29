@@ -67,3 +67,16 @@ func TestHashMiMC(t *testing.T) {
 		qt.Equals,
 		"f881f34991492d823e02565c778b824bac5eacef6340b70ee90a8966a2e63900")
 }
+
+func TestHashPoseidon2(t *testing.T) {
+	// Poseidon hash
+	hashFunc := &HashPoseidon2{}
+	bLen := hashFunc.Len()
+	h, err := hashFunc.Hash(
+		BigIntToBytes(bLen, big.NewInt(1)),
+		BigIntToBytes(bLen, big.NewInt(2)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("hash: %x", h)
+}
