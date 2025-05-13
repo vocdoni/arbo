@@ -40,7 +40,7 @@ func (t *Tree) AddBatchBigInt(keys []*big.Int, bigintsBatch [][]*big.Int) ([]Inv
 	wTx := t.valuesdb.WriteTx()
 	defer wTx.Discard()
 	for i := range bKeys {
-		if err := wTx.Set(bKeys[i], serializedBigIntsBatch[i]); err != nil {
+		if err := wTx.Set(bValues[i], serializedBigIntsBatch[i]); err != nil {
 			invalids = append(invalids, Invalid{i, err})
 		}
 	}
@@ -72,7 +72,7 @@ func (t *Tree) AddBigInt(key *big.Int, bigints ...*big.Int) error {
 	wTx := t.valuesdb.WriteTx()
 	defer wTx.Discard()
 	// store the serialized bigints in the valuesdb
-	if err := wTx.Set(bKey, serializedBigInts); err != nil {
+	if err := wTx.Set(bValue, serializedBigInts); err != nil {
 		return fmt.Errorf("serializedBigInts cannot be stored: %w", err)
 	}
 	return wTx.Commit()
@@ -102,7 +102,7 @@ func (t *Tree) UpdateBigInt(key *big.Int, bigints ...*big.Int) error {
 	wTx := t.valuesdb.WriteTx()
 	defer wTx.Discard()
 	// store the serialized bigints value in the valuesdb
-	if err := wTx.Set(bKey, serializedBigInts); err != nil {
+	if err := wTx.Set(bValue, serializedBigInts); err != nil {
 		return err
 	}
 	return wTx.Commit()
@@ -126,7 +126,7 @@ func (t *Tree) GetBigInt(k *big.Int) (
 	if err != nil {
 		return nil, nil, err
 	}
-	serializedBigInts, err := t.valuesdb.Get(bk)
+	serializedBigInts, err := t.valuesdb.Get(bv)
 	if err != nil {
 		return nil, nil, err
 	}
