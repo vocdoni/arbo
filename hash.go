@@ -10,7 +10,7 @@ import (
 	"github.com/consensys/gnark-crypto/hash"
 	"github.com/iden3/go-iden3-crypto/mimc7"
 	"github.com/iden3/go-iden3-crypto/poseidon"
-	multiposeidon "github.com/vocdoni/vocdoni-z-sandbox/crypto/hash/poseidon"
+	multiposeidon "github.com/vocdoni/davinci-node/crypto/hash/poseidon"
 	"golang.org/x/crypto/blake2b"
 )
 

@@ -31,7 +31,7 @@ require (
 	github.com/ronanh/intcomp v1.1.0 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
-	github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241216104229-fa0b063e636c // indirect
+	github.com/vocdoni/davinci-node v0.0.0-20241216104229-fa0b063e636c // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.vocdoni.io/dvote v1.10.2-0.20241024102542-c1ce6d744bc5 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
