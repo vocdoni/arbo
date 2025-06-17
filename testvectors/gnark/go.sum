@@ -124,8 +124,8 @@ github.com/vocdoni/arbo v0.0.0-20241216103934-e64315269b49 h1:GMyepEuxLflqhdDHts
 github.com/vocdoni/arbo v0.0.0-20241216103934-e64315269b49/go.mod h1:wXxPP+5vkT5t54lrKz6bCXKIyv8aRplKq8uCFb2wgy4=
 github.com/vocdoni/gnark-crypto-primitives v0.0.2-0.20250328120724-f9a3af9a3ace h1:ElTiK0ztqX/MAeFJXjjWNUyXrKXyHrt295rP6O2jf1w=
 github.com/vocdoni/gnark-crypto-primitives v0.0.2-0.20250328120724-f9a3af9a3ace/go.mod h1:L3OY0etasbmuSwOnAdNq7JnPuR7jY4A/wtFIlWvPhiU=
-github.com/vocdoni/davinci-node v0.0.0-20241216104229-fa0b063e636c h1:0KJ3ufAYWGpdXgdlnLjFblW98MK+KfdYUiXzKPtk9PA=
-github.com/vocdoni/davinci-node v0.0.0-20241216104229-fa0b063e636c/go.mod h1:mFXFbumAbxySlviwrGiclFPRiSDIs4WzXnQQqPyNX9k=
+github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241216104229-fa0b063e636c h1:0KJ3ufAYWGpdXgdlnLjFblW98MK+KfdYUiXzKPtk9PA=
+github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241216104229-fa0b063e636c/go.mod h1:mFXFbumAbxySlviwrGiclFPRiSDIs4WzXnQQqPyNX9k=
 github.com/x448/float16 v0.8.4 h1:qLwI1I70+NjRFUR3zs1JPUCgaCXSh3SW62uAKT1mSBM=
 github.com/x448/float16 v0.8.4/go.mod h1:14CWIYCyZA/cWjXOioeEpHeN/83MdbZDRQHoFcYsOfg=
 github.com/xdg-go/pbkdf2 v1.0.0 h1:Su7DPu48wXMwC3bs7MCNG+z4FhcyEuz5dlvchbq0B0c=

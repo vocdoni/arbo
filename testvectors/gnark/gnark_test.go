@@ -13,7 +13,7 @@ import (
 	"github.com/vocdoni/arbo"
 	"github.com/vocdoni/arbo/memdb"
 	"github.com/vocdoni/gnark-crypto-primitives/hash/bn254/poseidon"
-	garbo "github.com/vocdoni/gnark-crypto-primitives/tree/arbo"
+	"github.com/vocdoni/gnark-crypto-primitives/tree/smt"
 	gsmt "github.com/vocdoni/gnark-crypto-primitives/tree/smt"
 )
 
@@ -27,7 +27,9 @@ type testCircuitArbo struct {
 }
 
 func (circuit *testCircuitArbo) Define(api frontend.API) error {
-	return garbo.CheckInclusionProof(api, poseidon.MultiHash, circuit.Key, circuit.Value, circuit.Root, circuit.Siblings[:])
+	valid := smt.InclusionVerifier(api, poseidon.MultiHash, circuit.Root, circuit.Siblings[:], circuit.Key, circuit.Value)
+	api.AssertIsEqual(valid, 1)
+	return nil
 }
 
 func TestGnarkArboVerifier(t *testing.T) {
