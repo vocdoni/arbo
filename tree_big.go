@@ -269,12 +269,12 @@ func bigIntsToLeaf(hFn HashFunction, keyLen int, key *big.Int, bigints []*big.In
 // using the hash function of the tree. The resulting hash can be used as the leaf value
 func HashBigInts(hFn HashFunction, values ...*big.Int) ([]byte, error) {
 	chunks := make([][]byte, len(values))
-	for _, v := range values {
+	for i, v := range values {
 		value := hFn.SafeBigInt(v)
 		if value == nil {
 			return nil, fmt.Errorf("value cannot be nil")
 		}
-		chunks = append(chunks, value)
+		chunks[i] = value
 	}
 	return hFn.Hash(chunks...)
 }
