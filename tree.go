@@ -264,16 +264,20 @@ func (t *Tree) AddBatchWithTx(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	return t.addBatchInMemory(wTx, keys, values)
 }
 
+func (t *Tree) addBatchSequential(wTx db.WriteTx, keys, values [][]byte) ([]Invalid, error) {
+	var invalids []Invalid
+	for i := range keys {
+		if err := t.addWithTx(wTx, keys[i], values[i]); err != nil {
+			invalids = append(invalids, Invalid{i, err})
+		}
+	}
+	return invalids, nil
+}
+
 func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid, error) {
 	nCPU := flp2(runtime.NumCPU())
 	if nCPU == 1 || len(keys) < nCPU {
-		var invalids []Invalid
-		for i := range keys {
-			if err := t.addWithTx(wTx, keys[i], values[i]); err != nil {
-				invalids = append(invalids, Invalid{i, err})
-			}
-		}
-		return invalids, nil
+		return t.addBatchSequential(wTx, keys, values)
 	}
 	// split keys and values in buckets to add them in parallel by CPU
 	kvs, invalids, err := keysValuesToKvs(t.maxLevels, keys, values)
@@ -321,10 +325,11 @@ func (t *Tree) addBatchInDisk(wTx db.WriteTx, keys, values [][]byte) ([]Invalid,
 	}
 
 	if len(subRoots) != nCPU {
-		return nil, fmt.Errorf("this error should not be reached."+
-			" len(subRoots) != nCPU, len(subRoots)=%d, nCPU=%d."+
-			" Please report it in a new issue:"+
-			" https://github.com/vocdoni/arbo/issues/new", len(subRoots), nCPU)
+		// Tree structure doesn't support parallel processing with nCPU goroutines.
+		// This can happen when the tree is highly unbalanced or when key distribution
+		// doesn't create the expected binary tree structure. Fall back to sequential
+		// processing to ensure correctness.
+		return t.addBatchSequential(wTx, keys, values)
 	}
 
 	invalidsInBucket := make([][]Invalid, nCPU)
