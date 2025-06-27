@@ -48,6 +48,9 @@ const (
 	maxUint8 = int(^uint8(0)) // 2**8 -1
 	// maxUint16 is the max size of value length
 	maxUint16 = int(^uint16(0)) // 2**16 -1
+
+	// importDumpKeysPerBatch is the number of keys to import in a batch
+	importDumpKeysPerBatch = 50000
 )
 
 var (
@@ -1454,9 +1457,22 @@ func (t *Tree) ImportDumpReader(r io.Reader) error {
 		}
 		keys = append(keys, k)
 		values = append(values, v)
+
+		// Process batch when we reach the batch size
+		if len(keys) >= importDumpKeysPerBatch {
+			if _, err = t.AddBatch(keys, values); err != nil {
+				return err
+			}
+			// Clear slices for next batch to free memory
+			keys = keys[:0]
+			values = values[:0]
+		}
 	}
-	if _, err = t.AddBatch(keys, values); err != nil {
-		return err
+	// Process remaining entries if any
+	if len(keys) > 0 {
+		if _, err = t.AddBatch(keys, values); err != nil {
+			return err
+		}
 	}
 	return nil
 }
