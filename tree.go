@@ -1601,6 +1601,110 @@ func (t *Tree) PrintGraphvizFirstNLevels(fromRoot []byte, untilLvl int) error {
 	return nil
 }
 
-// TODO circom proofs
-// TODO data structure for proofs (including root, key, value, siblings,
-// hashFunction) + method to verify that data structure
+// CloneAndVacuum creates a pruned copy of the merkle tree in the target database,
+// copying only the nodes that are currently active (reachable from the specified root).
+// This effectively removes all orphaned nodes that are no longer part of the tree.
+// If fromRoot is nil, the current root is used.
+func (t *Tree) CloneAndVacuum(targetDB db.Database, fromRoot []byte) error {
+	// Determine the root to use
+	if fromRoot == nil {
+		var err error
+		fromRoot, err = t.Root()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Validate that the source root exists (unless it's the empty hash)
+	if !bytes.Equal(fromRoot, t.emptyHash) {
+		if _, err := t.treedb.Get(fromRoot); err != nil {
+			return fmt.Errorf("source root %x does not exist: %w", fromRoot, err)
+		}
+	}
+
+	// Create target tree structure with prefixed databases
+	targetTreeDB := prefixeddb.NewPrefixedDatabase(targetDB, dbTreePrefix)
+
+	// We use a batch size to avoid hitting transaction limits, pebble has a limit of 4 GiB
+	const batchSize = 1000000
+	var entryCount int
+	var targetWTx db.WriteTx
+
+	// Helper function to start a new transaction
+	startNewTx := func() error {
+		if targetWTx != nil {
+			targetWTx.Discard()
+		}
+		targetWTx = targetTreeDB.WriteTx()
+		entryCount = 0
+		return nil
+	}
+
+	// Helper function to commit current transaction if batch size is reached
+	commitIfNeeded := func() error {
+		if entryCount >= batchSize {
+			if err := targetWTx.Commit(); err != nil {
+				return fmt.Errorf("failed to commit batch: %w", err)
+			}
+			return startNewTx()
+		}
+		return nil
+	}
+
+	// Start first transaction
+	if err := startNewTx(); err != nil {
+		return err
+	}
+	defer targetWTx.Discard()
+
+	// Copy active nodes using iterWithStop
+	var copyErr error
+	err := t.iterWithStop(t.treedb, fromRoot, 0, func(currLvl int, k, v []byte) bool {
+		// Copy each active node to target database
+		if err := targetWTx.Set(k, v); err != nil {
+			copyErr = fmt.Errorf("failed to copy node %x: %w", k, err)
+			return true // stop iteration on error
+		}
+		entryCount++
+
+		// Commit batch if needed
+		if err := commitIfNeeded(); err != nil {
+			copyErr = err
+			return true // stop iteration on error
+		}
+
+		return false // continue iteration
+	})
+	if copyErr != nil {
+		return copyErr
+	}
+	if err != nil {
+		return fmt.Errorf("failed to iterate tree: %w", err)
+	}
+
+	// Copy metadata: root
+	if err := targetWTx.Set(dbKeyRoot, fromRoot); err != nil {
+		return fmt.Errorf("failed to set root: %w", err)
+	}
+	entryCount++
+
+	// Copy metadata: leaf count
+	nLeafs, err := t.GetNLeafs()
+	if err != nil {
+		return fmt.Errorf("failed to get leaf count: %w", err)
+	}
+
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(nLeafs))
+	if err := targetWTx.Set(dbKeyNLeafs, b); err != nil {
+		return fmt.Errorf("failed to set leaf count: %w", err)
+	}
+	entryCount++
+
+	// Commit the final transaction
+	if err := targetWTx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit final transaction: %w", err)
+	}
+
+	return nil
+}
