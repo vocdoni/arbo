@@ -1200,6 +1200,11 @@ func (t *Tree) SetRootWithTx(wTx db.WriteTx, root []byte) error {
 	return wTx.Set(dbKeyRoot, root)
 }
 
+// Database returns the db.Database used by the Tree
+func (t *Tree) Database() db.Database {
+	return t.treedb
+}
+
 // Snapshot returns a read-only copy of the Tree from the given root
 func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 	// allow to define which root to use
