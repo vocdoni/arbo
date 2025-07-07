@@ -6,7 +6,7 @@ import (
 	"sort"
 	"sync"
 
-	"go.vocdoni.io/dvote/db"
+	"github.com/vocdoni/davinci-node/db"
 )
 
 // MemoryDB is an in-memory implementation of the db.Database interface.

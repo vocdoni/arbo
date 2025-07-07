@@ -22,8 +22,8 @@ import (
 	"slices"
 	"sync"
 
-	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/prefixeddb"
+	"github.com/vocdoni/davinci-node/db"
+	"github.com/vocdoni/davinci-node/db/prefixeddb"
 )
 
 const (
