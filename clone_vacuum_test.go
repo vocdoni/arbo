@@ -7,8 +7,8 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/vocdoni/arbo/memdb"
-	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/pebbledb"
+	"github.com/vocdoni/davinci-node/db"
+	"github.com/vocdoni/davinci-node/db/pebbledb"
 )
 
 func TestCloneAndVacuum(t *testing.T) {

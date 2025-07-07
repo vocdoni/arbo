@@ -6,8 +6,7 @@ require (
 	github.com/consensys/gnark-crypto v0.17.1-0.20250415133755-1873045cbd7d
 	github.com/frankban/quicktest v1.14.6
 	github.com/iden3/go-iden3-crypto v0.0.17
-	github.com/vocdoni/davinci-node v0.0.0-20250612232803-98a2b4210829
-	go.vocdoni.io/dvote v1.10.2-0.20241024102542-c1ce6d744bc5
+	github.com/vocdoni/davinci-node v0.0.0-20250707135342-a3ec988643b3
 	golang.org/x/crypto v0.38.0
 )
 

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
-	"go.vocdoni.io/dvote/db"
-	"go.vocdoni.io/dvote/db/pebbledb"
+	"github.com/vocdoni/davinci-node/db"
+	"github.com/vocdoni/davinci-node/db/pebbledb"
 )
 
 func checkRoots(c *qt.C, tree1, tree2 *Tree) {
