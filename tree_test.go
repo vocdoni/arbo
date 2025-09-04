@@ -1009,3 +1009,59 @@ func benchmarkAdd(b *testing.B, hashFunc HashFunction, ks, vs [][]byte) {
 		}
 	}
 }
+
+func TestRootExists(t *testing.T) {
+	c := qt.New(t)
+	database, err := pebbledb.New(db.Options{Path: c.TempDir()})
+	c.Assert(err, qt.IsNil)
+	tree, err := NewTree(Config{
+		Database:     database,
+		MaxLevels:    256,
+		HashFunction: HashFunctionPoseidon,
+	})
+	c.Assert(err, qt.IsNil)
+	defer tree.treedb.Close() //nolint:errcheck
+
+	// Create tree and add some leafs
+	bLen := 32
+	k1 := BigIntToBytes(bLen, big.NewInt(1))
+	v1 := BigIntToBytes(bLen, big.NewInt(2))
+	err = tree.Add(k1, v1)
+	c.Assert(err, qt.IsNil)
+
+	k2 := BigIntToBytes(bLen, big.NewInt(33))
+	v2 := BigIntToBytes(bLen, big.NewInt(44))
+	err = tree.Add(k2, v2)
+	c.Assert(err, qt.IsNil)
+
+	// Get the root after adding some leafs
+	firstRoot, err := tree.Root()
+	c.Assert(err, qt.IsNil)
+
+	// Add more leafs
+	k3 := BigIntToBytes(bLen, big.NewInt(100))
+	v3 := BigIntToBytes(bLen, big.NewInt(200))
+	err = tree.Add(k3, v3)
+	c.Assert(err, qt.IsNil)
+
+	// Get the new root - should be different
+	secondRoot, err := tree.Root()
+	c.Assert(err, qt.IsNil)
+	c.Assert(firstRoot, qt.Not(qt.DeepEquals), secondRoot)
+
+	// Verify both roots exist using RootExists
+	err = tree.RootExists(firstRoot)
+	c.Assert(err, qt.IsNil)
+
+	err = tree.RootExists(secondRoot)
+	c.Assert(err, qt.IsNil)
+
+	// Try a wrong root and verify it is not OK
+	wrongRoot := make([]byte, tree.hashFunction.Len())
+	for i := range wrongRoot {
+		wrongRoot[i] = 0xFF // Fill with 0xFF to ensure it doesn't exist
+	}
+	err = tree.RootExists(wrongRoot)
+	c.Assert(err, qt.Not(qt.IsNil))
+	c.Assert(err.Error(), qt.Contains, "does not exist in the db")
+}

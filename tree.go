@@ -1208,6 +1208,15 @@ func (t *Tree) SetRootWithTx(wTx db.WriteTx, root []byte) error {
 	return wTx.Set(dbKeyRoot, root)
 }
 
+// RootExists checks if the given root exists in the db
+func (t *Tree) RootExists(root []byte) error {
+	rTx := t.treedb
+	if _, err := rTx.Get(root); err != nil {
+		return fmt.Errorf("root %x does not exist in the db", root)
+	}
+	return nil
+}
+
 // Database returns the db.Database used by the Tree
 func (t *Tree) Database() db.Database {
 	return t.treedb
