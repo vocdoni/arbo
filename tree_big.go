@@ -181,13 +181,21 @@ func (t *Tree) leafToBigInts(bkey, value, serializedBigInts []byte) (
 	// reverse the process of bigints encoding
 	bigints = deserializeBigInts(serializedBigInts)
 	// reencode the leaf value of the tree to check if it matches the value
-	bigintsHash, err := HashBigInts(t.HashFunction(), bigints...)
-	if err != nil {
-		return nil, nil, err
+	var expectedLeafValue []byte
+	if len(bigints) == 1 {
+		expectedLeafValue = t.HashFunction().SafeBigInt(bigints[0])
+		if expectedLeafValue == nil {
+			return nil, nil, fmt.Errorf("value cannot be nil")
+		}
+	} else {
+		expectedLeafValue, err = HashBigInts(t.HashFunction(), bigints...)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 	// check if the value of the leaf node matches the value used to build the
 	// tree
-	if !bytes.Equal(bigintsHash, value) {
+	if !bytes.Equal(expectedLeafValue, value) {
 		return nil, nil, fmt.Errorf("LeafToBigInt: bigintsHash != value")
 	}
 	// convert the bytes of the key to a big.Int
@@ -258,9 +266,16 @@ func bigIntsToLeaf(hFn HashFunction, keyLen int, key *big.Int, bigints []*big.In
 		return nil, nil, nil, err
 	}
 	// calculate the value used to build the tree
-	bValue, err = HashBigInts(hFn, bigints...)
-	if err != nil {
-		return nil, nil, nil, err
+	if len(bigints) == 1 {
+		bValue = hFn.SafeBigInt(bigints[0])
+		if bValue == nil {
+			return nil, nil, nil, fmt.Errorf("value cannot be nil")
+		}
+	} else {
+		bValue, err = HashBigInts(hFn, bigints...)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 	}
 	return bKey, bValue, serializedBigInts, nil
 }
