@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
+
+	"github.com/vocdoni/davinci-node/db"
 )
 
 // AddBatchBigInt adds a batch of key-value pairs to the tree, it converts the
@@ -13,10 +15,24 @@ import (
 // creates a transaction to store the full values in the valuesdb. It returns
 // a slice of Invalid items and an error if something fails.
 func (t *Tree) AddBatchBigInt(keys []*big.Int, bigintsBatch [][]*big.Int) ([]Invalid, error) {
+	wTx := t.treedb.WriteTx()
+	defer wTx.Discard()
+
+	invalids, err := t.AddBatchBigIntWithTx(wTx, keys, bigintsBatch)
+	if err != nil {
+		return invalids, err
+	}
+
+	return invalids, wTx.Commit()
+}
+
+// AddBatchBigIntWithTx does the same than AddBatchBigInt, but allowing to pass
+// the db.WriteTx that is used for the tree. The db.WriteTx will not be
+// committed inside this method.
+func (t *Tree) AddBatchBigIntWithTx(wTx db.WriteTx, keys []*big.Int, bigintsBatch [][]*big.Int) ([]Invalid, error) {
 	if len(keys) != len(bigintsBatch) {
 		return nil, fmt.Errorf("the number of keys and values missmatch")
 	}
-	// convert each key-value tuple into bytes
 	var err error
 	bKeys := make([][]byte, len(keys))
 	bValues := make([][]byte, len(keys))
@@ -27,24 +43,21 @@ func (t *Tree) AddBatchBigInt(keys []*big.Int, bigintsBatch [][]*big.Int) ([]Inv
 			return nil, err
 		}
 	}
-	// acquire lock to make an atomic update to treedb and valuesdb
 	t.valuesdbMu.Lock()
 	defer t.valuesdbMu.Unlock()
-	// add the keys and leaf values in batch
-	if invalids, err := t.AddBatch(bKeys, bValues); err != nil {
+	invalids, err := t.AddBatchWithTx(wTx, bKeys, bValues)
+	if err != nil {
 		return invalids, err
 	}
-	// create a transaction for each group of keys and serialized values and store
-	// the errors in a slice to return them
-	var invalids []Invalid
-	wTx := t.valuesdb.WriteTx()
-	defer wTx.Discard()
+	var valueInvalids []Invalid
+	vTx := t.valuesdb.WriteTx()
+	defer vTx.Discard()
 	for i := range bKeys {
-		if err := wTx.Set(bValues[i], serializedBigIntsBatch[i]); err != nil {
-			invalids = append(invalids, Invalid{i, err})
+		if err := vTx.Set(bValues[i], serializedBigIntsBatch[i]); err != nil {
+			valueInvalids = append(valueInvalids, Invalid{i, err})
 		}
 	}
-	return invalids, wTx.Commit()
+	return append(invalids, valueInvalids...), vTx.Commit()
 }
 
 // AddBigInt adds a key-value pair to the tree, it converts the big.Int key
@@ -53,29 +66,38 @@ func (t *Tree) AddBatchBigInt(keys []*big.Int, bigintsBatch [][]*big.Int) ([]Inv
 // transaction to store the serialized bigints in the valuesdb. It returns an error if
 // something fails.
 func (t *Tree) AddBigInt(key *big.Int, bigints ...*big.Int) error {
+	wTx := t.treedb.WriteTx()
+	defer wTx.Discard()
+
+	if err := t.AddBigIntWithTx(wTx, key, bigints...); err != nil {
+		return err
+	}
+
+	return wTx.Commit()
+}
+
+// AddBigIntWithTx does the same than AddBigInt, but allowing to pass the
+// db.WriteTx that is used for the tree. The db.WriteTx will not be committed
+// inside this method.
+func (t *Tree) AddBigIntWithTx(wTx db.WriteTx, key *big.Int, bigints ...*big.Int) error {
 	if key == nil {
 		return fmt.Errorf("key cannot be nil")
 	}
-	// convert the big ints to bytes
 	bKey, bValue, serializedBigInts, err := bigIntsToLeaf(t.HashFunction(), t.MaxKeyLen(), key, bigints)
 	if err != nil {
 		return err
 	}
-	// acquire lock to make an atomic update to treedb and valuesdb
 	t.valuesdbMu.Lock()
 	defer t.valuesdbMu.Unlock()
-	// add it to the tree
-	if err := t.Add(bKey, bValue); err != nil {
+	if err := t.AddWithTx(wTx, bKey, bValue); err != nil {
 		return fmt.Errorf("raw key cannot be added: %w", err)
 	}
-	// create a transaction to store the serialized bigints
-	wTx := t.valuesdb.WriteTx()
-	defer wTx.Discard()
-	// store the serialized bigints in the valuesdb
-	if err := wTx.Set(bValue, serializedBigInts); err != nil {
+	vTx := t.valuesdb.WriteTx()
+	defer vTx.Discard()
+	if err := vTx.Set(bValue, serializedBigInts); err != nil {
 		return fmt.Errorf("serializedBigInts cannot be stored: %w", err)
 	}
-	return wTx.Commit()
+	return vTx.Commit()
 }
 
 // UpdateBigInt updates the value of a key as a big.Int and the values of the
@@ -83,29 +105,38 @@ func (t *Tree) AddBigInt(key *big.Int, bigints ...*big.Int) error {
 // the leaf node in the tree, then it stores the full value in the valuesdb. It
 // returns an error if something fails.
 func (t *Tree) UpdateBigInt(key *big.Int, bigints ...*big.Int) error {
+	wTx := t.treedb.WriteTx()
+	defer wTx.Discard()
+
+	if err := t.UpdateBigIntWithTx(wTx, key, bigints...); err != nil {
+		return err
+	}
+
+	return wTx.Commit()
+}
+
+// UpdateBigIntWithTx does the same than UpdateBigInt, but allowing to pass the
+// db.WriteTx that is used for the tree. The db.WriteTx will not be committed
+// inside this method.
+func (t *Tree) UpdateBigIntWithTx(wTx db.WriteTx, key *big.Int, bigints ...*big.Int) error {
 	if key == nil {
 		return fmt.Errorf("key cannot be nil")
 	}
-	// convert the big ints to bytes
 	bKey, bValue, serializedBigInts, err := bigIntsToLeaf(t.HashFunction(), t.MaxKeyLen(), key, bigints)
 	if err != nil {
 		return err
 	}
-	// acquire lock to make an atomic update to treedb and valuesdb
 	t.valuesdbMu.Lock()
 	defer t.valuesdbMu.Unlock()
-	// update the leaf in the tree
-	if err := t.Update(bKey, bValue); err != nil {
+	if err := t.UpdateWithTx(wTx, bKey, bValue); err != nil {
 		return err
 	}
-	// create a transaction to store the serialized bigints
-	wTx := t.valuesdb.WriteTx()
-	defer wTx.Discard()
-	// store the serialized bigints value in the valuesdb
-	if err := wTx.Set(bValue, serializedBigInts); err != nil {
+	vTx := t.valuesdb.WriteTx()
+	defer vTx.Discard()
+	if err := vTx.Set(bValue, serializedBigInts); err != nil {
 		return err
 	}
-	return wTx.Commit()
+	return vTx.Commit()
 }
 
 // GetBigInt receives the value of a key as a big.Int and the values of the leaf
@@ -115,14 +146,24 @@ func (t *Tree) UpdateBigInt(key *big.Int, bigints ...*big.Int) error {
 func (t *Tree) GetBigInt(k *big.Int) (
 	key *big.Int, bigints []*big.Int, err error,
 ) {
-	// acquire lock to wait for atomic updates to treedb and valuesdb to finish
+	return t.GetBigIntWithTx(t.treedb, k)
+}
+
+// GetBigIntWithTx receives the value of a key as a big.Int and the values of
+// the leaf node as a slice of big.Ints. It encodes the key as bytes and gets
+// the leaf node from the tree using the given db.Reader, then it decodes the
+// serialized bigints of the leaf node and returns the key and the values or an
+// error if something fails.
+func (t *Tree) GetBigIntWithTx(rTx db.Reader, k *big.Int) (
+	key *big.Int, bigints []*big.Int, err error,
+) {
 	t.valuesdbMu.RLock()
 	defer t.valuesdbMu.RUnlock()
 	if k == nil {
 		return nil, nil, fmt.Errorf("key cannot be nil")
 	}
 	bk := bigIntToLeafKey(k, t.MaxKeyLen())
-	_, bv, err := t.Get(bk)
+	_, bv, err := t.GetWithTx(rTx, bk)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -140,11 +181,19 @@ func (t *Tree) GetBigInt(k *big.Int) (
 func (t *Tree) GenProofBigInts(key *big.Int) (
 	leafKey []byte, leafValue []byte, siblings []byte, existence bool, err error,
 ) {
+	return t.GenProofBigIntsWithTx(t.treedb, key)
+}
+
+// GenProofBigIntsWithTx generates a proof for a key as a big.Int using the
+// given db.Reader.
+func (t *Tree) GenProofBigIntsWithTx(rTx db.Reader, key *big.Int) (
+	leafKey []byte, leafValue []byte, siblings []byte, existence bool, err error,
+) {
 	if key == nil {
 		return nil, nil, nil, false, fmt.Errorf("key cannot be nil")
 	}
 	bk := bigIntToLeafKey(key, t.MaxKeyLen())
-	return t.GenProof(bk)
+	return t.GenProofWithTx(rTx, bk)
 }
 
 // GenerateCircomVerifierProofBigInt generates a CircomVerifierProof for a key
@@ -152,11 +201,45 @@ func (t *Tree) GenProofBigInts(key *big.Int) (
 // for the key, then it returns the CircomVerifierProof or an error if
 // something fails.
 func (t *Tree) GenerateCircomVerifierProofBigInt(k *big.Int) (*CircomVerifierProof, error) {
+	return t.GenerateCircomVerifierProofBigIntWithTx(t.treedb, k)
+}
+
+// GenerateCircomVerifierProofBigIntWithTx generates a CircomVerifierProof for
+// a key as a big.Int using the given db.Reader.
+func (t *Tree) GenerateCircomVerifierProofBigIntWithTx(rTx db.Reader, k *big.Int) (*CircomVerifierProof, error) {
 	if k == nil {
 		return nil, fmt.Errorf("key cannot be nil")
 	}
-	bk := bigIntToLeafKey(k, t.MaxKeyLen())
-	return t.GenerateCircomVerifierProof(bk)
+	kAux, v, siblings, existence, err := t.GenProofBigIntsWithTx(rTx, k)
+	if err != nil && err != ErrKeyNotFound {
+		return nil, err
+	}
+	var cp CircomVerifierProof
+	cp.Root, err = t.RootWithTx(rTx)
+	if err != nil {
+		return nil, err
+	}
+	s, err := UnpackSiblings(t.hashFunction, siblings)
+	if err != nil {
+		return nil, err
+	}
+	cp.Siblings = t.FillMissingEmptySiblings(s)
+	if !existence {
+		cp.OldKey = kAux
+		cp.OldValue = v
+	} else {
+		cp.OldKey = emptyValue
+		cp.OldValue = emptyValue
+	}
+	cp.Key = bigIntToLeafKey(k, t.MaxKeyLen())
+	cp.Value = v
+	if existence {
+		cp.Fnc = 0
+	} else {
+		cp.Fnc = 1
+	}
+
+	return &cp, nil
 }
 
 // GenerateGnarkVerifierProofBigInt generates a GnarkVerifierProof for a key
@@ -164,11 +247,50 @@ func (t *Tree) GenerateCircomVerifierProofBigInt(k *big.Int) (*CircomVerifierPro
 // for the key, then it returns the GnarkVerifierProof or an error if
 // something fails.
 func (t *Tree) GenerateGnarkVerifierProofBigInt(k *big.Int) (*GnarkVerifierProof, error) {
+	return t.GenerateGnarkVerifierProofBigIntWithTx(t.treedb, k)
+}
+
+// GenerateGnarkVerifierProofBigIntWithTx generates a GnarkVerifierProof for a
+// key as a big.Int using the given db.Reader.
+func (t *Tree) GenerateGnarkVerifierProofBigIntWithTx(rTx db.Reader, k *big.Int) (*GnarkVerifierProof, error) {
 	if k == nil {
 		return nil, fmt.Errorf("key cannot be nil")
 	}
-	bk := bigIntToLeafKey(k, t.MaxKeyLen())
-	return t.GenerateGnarkVerifierProof(bk)
+	oldKey, value, siblings, existence, err := t.GenProofBigIntsWithTx(rTx, k)
+	if err != nil && err != ErrKeyNotFound {
+		return nil, err
+	}
+	root, err := t.RootWithTx(rTx)
+	if err != nil {
+		return nil, err
+	}
+	unpackedSiblings, err := UnpackSiblings(t.hashFunction, siblings)
+	if err != nil {
+		return nil, err
+	}
+	bigSiblings := make([]*big.Int, len(unpackedSiblings))
+	for i := range bigSiblings {
+		bigSiblings[i] = BytesToBigInt(unpackedSiblings[i])
+	}
+	gp := GnarkVerifierProof{
+		Root:     BytesToBigInt(root),
+		Key:      BytesToBigInt(bigIntToLeafKey(k, t.MaxKeyLen())),
+		Value:    BytesToBigInt(value),
+		Siblings: bigSiblings,
+		OldKey:   big.NewInt(0),
+		OldValue: big.NewInt(0),
+		IsOld0:   big.NewInt(0),
+		Fnc:      big.NewInt(0),
+	}
+	if !existence {
+		gp.OldKey = BytesToBigInt(oldKey)
+		gp.OldValue = BytesToBigInt(value)
+		gp.Fnc = big.NewInt(1)
+	}
+	if len(oldKey) == 0 {
+		gp.IsOld0 = big.NewInt(1)
+	}
+	return &gp, nil
 }
 
 // leafToBigInts converts the bytes of the key and the value of a leaf node

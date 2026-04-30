@@ -222,6 +222,97 @@ func TestAddBatchBigInt(t *testing.T) {
 	c.Check(len(invalids), qt.Equals, 0)
 }
 
+func TestBigIntWithTxWrappers(t *testing.T) {
+	c := qt.New(t)
+	tree, err := NewTree(Config{
+		Database:     memdb.New(),
+		MaxLevels:    256,
+		HashFunction: HashFunctionPoseidon,
+	})
+	c.Assert(err, qt.IsNil)
+	defer tree.treedb.Close()   //nolint:errcheck
+	defer tree.valuesdb.Close() //nolint:errcheck
+
+	key := big.NewInt(42)
+	value := big.NewInt(84)
+	wTx := tree.treedb.WriteTx()
+	defer wTx.Discard()
+
+	c.Assert(tree.AddBigIntWithTx(wTx, key, value), qt.IsNil)
+
+	_, _, err = tree.GetBigInt(key)
+	c.Check(err, qt.IsNotNil)
+
+	gotKey, gotValues, err := tree.GetBigIntWithTx(wTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Check(gotKey.Cmp(key), qt.Equals, 0)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(value), qt.Equals, 0)
+
+	_, _, _, exists, err := tree.GenProofBigIntsWithTx(wTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Check(exists, qt.IsTrue)
+
+	cvp, err := tree.GenerateCircomVerifierProofBigIntWithTx(wTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Check(cvp.Fnc, qt.Equals, 0)
+
+	gp, err := tree.GenerateGnarkVerifierProofBigIntWithTx(wTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Check(gp.Fnc.Cmp(big.NewInt(0)), qt.Equals, 0)
+
+	c.Assert(wTx.Commit(), qt.IsNil)
+
+	gotKey, gotValues, err = tree.GetBigInt(key)
+	c.Assert(err, qt.IsNil)
+	c.Check(gotKey.Cmp(key), qt.Equals, 0)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(value), qt.Equals, 0)
+
+	newValue := big.NewInt(126)
+	updateTx := tree.treedb.WriteTx()
+	defer updateTx.Discard()
+
+	c.Assert(tree.UpdateBigIntWithTx(updateTx, key, newValue), qt.IsNil)
+
+	gotKey, gotValues, err = tree.GetBigIntWithTx(updateTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Check(gotKey.Cmp(key), qt.Equals, 0)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(newValue), qt.Equals, 0)
+
+	c.Assert(updateTx.Commit(), qt.IsNil)
+
+	gotKey, gotValues, err = tree.GetBigInt(key)
+	c.Assert(err, qt.IsNil)
+	c.Check(gotKey.Cmp(key), qt.Equals, 0)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(newValue), qt.Equals, 0)
+
+	batchTx := tree.treedb.WriteTx()
+	defer batchTx.Discard()
+	key2 := big.NewInt(128)
+	value2 := big.NewInt(256)
+	key3 := big.NewInt(129)
+	value3 := big.NewInt(258)
+	invalids, err := tree.AddBatchBigIntWithTx(batchTx,
+		[]*big.Int{key2, key3},
+		[][]*big.Int{{value2}, {value3}},
+	)
+	c.Assert(err, qt.IsNil)
+	c.Check(invalids, qt.HasLen, 0)
+
+	_, batchValues, err := tree.GetBigIntWithTx(batchTx, key2)
+	c.Assert(err, qt.IsNil)
+	c.Assert(batchValues, qt.HasLen, 1)
+	c.Check(batchValues[0].Cmp(value2), qt.Equals, 0)
+
+	_, batchValues, err = tree.GetBigIntWithTx(batchTx, key3)
+	c.Assert(err, qt.IsNil)
+	c.Assert(batchValues, qt.HasLen, 1)
+	c.Check(batchValues[0].Cmp(value3), qt.Equals, 0)
+}
+
 func BenchmarkAddBatchBigInt(b *testing.B) {
 	// Prepare batch data with large random big ints
 	batchSize := 1000
