@@ -235,12 +235,16 @@ func TestBigIntWithTxWrappers(t *testing.T) {
 
 	key := big.NewInt(42)
 	value := big.NewInt(84)
+	_, bValue, _, err := bigIntsToLeaf(tree.HashFunction(), tree.MaxKeyLen(), key, []*big.Int{value})
+	c.Assert(err, qt.IsNil)
 	wTx := tree.treedb.WriteTx()
 	defer wTx.Discard()
 
 	c.Assert(tree.AddBigIntWithTx(wTx, key, value), qt.IsNil)
 
 	_, _, err = tree.GetBigInt(key)
+	c.Check(err, qt.IsNotNil)
+	_, err = tree.valuesdb.Get(bValue)
 	c.Check(err, qt.IsNotNil)
 
 	gotKey, gotValues, err := tree.GetBigIntWithTx(wTx, key)
@@ -262,6 +266,9 @@ func TestBigIntWithTxWrappers(t *testing.T) {
 	c.Check(gp.Fnc.Cmp(big.NewInt(0)), qt.Equals, 0)
 
 	c.Assert(wTx.Commit(), qt.IsNil)
+
+	_, err = tree.valuesdb.Get(bValue)
+	c.Check(err, qt.IsNil)
 
 	gotKey, gotValues, err = tree.GetBigInt(key)
 	c.Assert(err, qt.IsNil)
@@ -311,6 +318,88 @@ func TestBigIntWithTxWrappers(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(batchValues, qt.HasLen, 1)
 	c.Check(batchValues[0].Cmp(value3), qt.Equals, 0)
+}
+
+func TestBigIntWithTxDiscardDoesNotCommitValues(t *testing.T) {
+	c := qt.New(t)
+	tree, err := NewTree(Config{
+		Database:     memdb.New(),
+		MaxLevels:    256,
+		HashFunction: HashFunctionPoseidon,
+	})
+	c.Assert(err, qt.IsNil)
+	defer tree.treedb.Close()   //nolint:errcheck
+	defer tree.valuesdb.Close() //nolint:errcheck
+
+	key := big.NewInt(42)
+	value := big.NewInt(84)
+	_, bValue, _, err := bigIntsToLeaf(tree.HashFunction(), tree.MaxKeyLen(), key, []*big.Int{value})
+	c.Assert(err, qt.IsNil)
+
+	wTx := tree.treedb.WriteTx()
+	c.Assert(tree.AddBigIntWithTx(wTx, key, value), qt.IsNil)
+
+	_, gotValues, err := tree.GetBigIntWithTx(wTx, key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(value), qt.Equals, 0)
+
+	wTx.Discard()
+
+	_, _, err = tree.GetBigInt(key)
+	c.Check(err, qt.IsNotNil)
+	_, err = tree.valuesdb.Get(bValue)
+	c.Check(err, qt.IsNotNil)
+}
+
+func TestAddBatchBigIntWithTxSkipsValuesForInvalidTreeEntries(t *testing.T) {
+	c := qt.New(t)
+	tree, err := NewTree(Config{
+		Database:     memdb.New(),
+		MaxLevels:    256,
+		HashFunction: HashFunctionPoseidon,
+	})
+	c.Assert(err, qt.IsNil)
+	defer tree.treedb.Close()   //nolint:errcheck
+	defer tree.valuesdb.Close() //nolint:errcheck
+
+	key := big.NewInt(42)
+	originalValue := big.NewInt(84)
+	c.Assert(tree.AddBigInt(key, originalValue), qt.IsNil)
+
+	duplicateValue := big.NewInt(168)
+	newKey := big.NewInt(43)
+	newValue := big.NewInt(86)
+	_, duplicateBValue, _, err := bigIntsToLeaf(tree.HashFunction(), tree.MaxKeyLen(), key, []*big.Int{duplicateValue})
+	c.Assert(err, qt.IsNil)
+	_, newBValue, _, err := bigIntsToLeaf(tree.HashFunction(), tree.MaxKeyLen(), newKey, []*big.Int{newValue})
+	c.Assert(err, qt.IsNil)
+
+	wTx := tree.treedb.WriteTx()
+	defer wTx.Discard()
+	invalids, err := tree.AddBatchBigIntWithTx(
+		wTx,
+		[]*big.Int{key, newKey},
+		[][]*big.Int{{duplicateValue}, {newValue}},
+	)
+	c.Assert(err, qt.IsNil)
+	c.Assert(invalids, qt.HasLen, 1)
+	c.Check(invalids[0].Index, qt.Equals, 0)
+	c.Assert(wTx.Commit(), qt.IsNil)
+
+	_, err = tree.valuesdb.Get(duplicateBValue)
+	c.Check(err, qt.IsNotNil)
+	_, err = tree.valuesdb.Get(newBValue)
+	c.Check(err, qt.IsNil)
+
+	_, gotValues, err := tree.GetBigInt(key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(originalValue), qt.Equals, 0)
+	_, gotValues, err = tree.GetBigInt(newKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotValues, qt.HasLen, 1)
+	c.Check(gotValues[0].Cmp(newValue), qt.Equals, 0)
 }
 
 func BenchmarkAddBatchBigInt(b *testing.B) {

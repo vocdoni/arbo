@@ -7,13 +7,14 @@ import (
 	"slices"
 
 	"github.com/vocdoni/davinci-node/db"
+	"github.com/vocdoni/davinci-node/db/prefixeddb"
 )
 
 // AddBatchBigInt adds a batch of key-value pairs to the tree, it converts the
 // big.Int keys and the slices of big.Int values into bytes and adds them to
 // the tree. It locks the tree to prevent concurrent writes to the valuesdb and
-// creates a transaction to store the full values in the valuesdb. It returns
-// a slice of Invalid items and an error if something fails.
+// stores the full values in the same transaction as the tree. It returns a
+// slice of Invalid items and an error if something fails.
 func (t *Tree) AddBatchBigInt(keys []*big.Int, bigintsBatch [][]*big.Int) ([]Invalid, error) {
 	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
@@ -50,21 +51,34 @@ func (t *Tree) AddBatchBigIntWithTx(wTx db.WriteTx, keys []*big.Int, bigintsBatc
 		return invalids, err
 	}
 	var valueInvalids []Invalid
-	vTx := t.valuesdb.WriteTx()
-	defer vTx.Discard()
+	var valueErr error
+	invalidIndexes := make(map[int]struct{}, len(invalids))
+	for _, invalid := range invalids {
+		invalidIndexes[invalid.Index] = struct{}{}
+	}
+	vTx := valuesWriteTx(wTx)
 	for i := range bKeys {
+		if _, invalid := invalidIndexes[i]; invalid {
+			continue
+		}
 		if err := vTx.Set(bValues[i], serializedBigIntsBatch[i]); err != nil {
 			valueInvalids = append(valueInvalids, Invalid{i, err})
+			if valueErr == nil {
+				valueErr = err
+			}
 		}
 	}
-	return append(invalids, valueInvalids...), vTx.Commit()
+	if valueErr != nil {
+		return append(invalids, valueInvalids...), fmt.Errorf("serializedBigInts cannot be stored: %w", valueErr)
+	}
+	return append(invalids, valueInvalids...), nil
 }
 
 // AddBigInt adds a key-value pair to the tree, it converts the big.Int key
 // and the slice of big.Int values into bytes and adds them to the tree. It
-// locks the tree to prevent concurrent writes to the valuesdb and creates a
-// transaction to store the serialized bigints in the valuesdb. It returns an error if
-// something fails.
+// locks the tree to prevent concurrent writes to the valuesdb and stores the
+// serialized bigints in the same transaction as the tree. It returns an error
+// if something fails.
 func (t *Tree) AddBigInt(key *big.Int, bigints ...*big.Int) error {
 	wTx := t.treedb.WriteTx()
 	defer wTx.Discard()
@@ -92,12 +106,11 @@ func (t *Tree) AddBigIntWithTx(wTx db.WriteTx, key *big.Int, bigints ...*big.Int
 	if err := t.AddWithTx(wTx, bKey, bValue); err != nil {
 		return fmt.Errorf("raw key cannot be added: %w", err)
 	}
-	vTx := t.valuesdb.WriteTx()
-	defer vTx.Discard()
+	vTx := valuesWriteTx(wTx)
 	if err := vTx.Set(bValue, serializedBigInts); err != nil {
 		return fmt.Errorf("serializedBigInts cannot be stored: %w", err)
 	}
-	return vTx.Commit()
+	return nil
 }
 
 // UpdateBigInt updates the value of a key as a big.Int and the values of the
@@ -131,12 +144,11 @@ func (t *Tree) UpdateBigIntWithTx(wTx db.WriteTx, key *big.Int, bigints ...*big.
 	if err := t.UpdateWithTx(wTx, bKey, bValue); err != nil {
 		return err
 	}
-	vTx := t.valuesdb.WriteTx()
-	defer vTx.Discard()
+	vTx := valuesWriteTx(wTx)
 	if err := vTx.Set(bValue, serializedBigInts); err != nil {
 		return err
 	}
-	return vTx.Commit()
+	return nil
 }
 
 // GetBigInt receives the value of a key as a big.Int and the values of the leaf
@@ -167,11 +179,57 @@ func (t *Tree) GetBigIntWithTx(rTx db.Reader, k *big.Int) (
 	if err != nil {
 		return nil, nil, err
 	}
-	serializedBigInts, err := t.valuesdb.Get(bv)
+	serializedBigInts, err := t.valuesReader(rTx).Get(bv)
 	if err != nil {
 		return nil, nil, err
 	}
 	return t.leafToBigInts(ExplicitZero(bk), bv, serializedBigInts)
+}
+
+type writeTxUnwrapper interface {
+	Unwrap() db.WriteTx
+}
+
+type prefixedWriteTx interface {
+	db.WriteTx
+	Prefix() []byte
+	Unwrap() db.WriteTx
+}
+
+func unwrapWriteTx(wTx db.WriteTx) db.WriteTx {
+	for {
+		unwrapped, ok := wTx.(writeTxUnwrapper)
+		if !ok {
+			return wTx
+		}
+		next := unwrapped.Unwrap()
+		if next == nil || next == wTx {
+			return wTx
+		}
+		wTx = next
+	}
+}
+
+func valuesWriteTx(wTx db.WriteTx) db.WriteTx {
+	if ptx, ok := wTx.(prefixedWriteTx); ok {
+		prefix := ptx.Prefix()
+		if bytes.HasSuffix(prefix, dbTreePrefix) {
+			parentPrefix := prefix[:len(prefix)-len(dbTreePrefix)]
+			valuePrefix := make([]byte, 0, len(parentPrefix)+len(dbValuesPrefix))
+			valuePrefix = append(valuePrefix, parentPrefix...)
+			valuePrefix = append(valuePrefix, dbValuesPrefix...)
+			return prefixeddb.NewPrefixedWriteTx(ptx.Unwrap(), valuePrefix)
+		}
+	}
+	return prefixeddb.NewPrefixedWriteTx(unwrapWriteTx(wTx), dbValuesPrefix)
+}
+
+func (t *Tree) valuesReader(rTx db.Reader) db.Reader {
+	wTx, ok := rTx.(db.WriteTx)
+	if !ok {
+		return t.valuesdb
+	}
+	return valuesWriteTx(wTx)
 }
 
 // GenProofBigInts generates a proof for a key as a big.Int. It converts the
