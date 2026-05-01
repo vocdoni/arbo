@@ -1260,6 +1260,7 @@ func (t *Tree) Snapshot(fromRoot []byte) (*Tree, error) {
 
 	return &Tree{
 		treedb:       t.treedb,
+		valuesdb:     t.valuesdb,
 		maxLevels:    t.maxLevels,
 		snapshotRoot: fromRoot,
 		emptyHash:    t.emptyHash,
