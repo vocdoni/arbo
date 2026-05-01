@@ -127,7 +127,7 @@ type Config struct {
 // NewTree returns a new Tree, if there is a Tree still in the given database, it
 // will load it.
 func NewTree(cfg Config) (*Tree, error) {
-	wTx := prefixeddb.NewPrefixedWriteTx(cfg.Database.WriteTx(), dbTreePrefix)
+	wTx := NewTreeWriteTx(cfg.Database)
 	defer wTx.Discard()
 
 	t, err := NewTreeWithTx(wTx, cfg)
@@ -141,8 +141,15 @@ func NewTree(cfg Config) (*Tree, error) {
 	return t, nil
 }
 
+// NewTreeWriteTx returns a write transaction scoped to arbo's persisted tree
+// namespace. The caller is responsible for committing or discarding the
+// returned transaction.
+func NewTreeWriteTx(database db.Database) db.WriteTx {
+	return prefixeddb.NewPrefixedWriteTx(database.WriteTx(), dbTreePrefix)
+}
+
 // NewTreeWithTx returns a new Tree using the given db.WriteTx, which will not
-// be ccommited inside this method, if there is a Tree still in the given
+// be committed inside this method. If there is a Tree still in the given
 // database, it will load it.
 func NewTreeWithTx(wTx db.WriteTx, cfg Config) (*Tree, error) {
 	// if thresholdNLeafs is set to 0, use the DefaultThresholdNLeafs
@@ -1220,6 +1227,13 @@ func (t *Tree) RootExists(root []byte) error {
 // Database returns the db.Database used by the Tree
 func (t *Tree) Database() db.Database {
 	return t.treedb
+}
+
+// WriteTx returns a write transaction scoped to this Tree's persisted
+// namespace. The caller is responsible for committing or discarding the
+// returned transaction.
+func (t *Tree) WriteTx() db.WriteTx {
+	return t.treedb.WriteTx()
 }
 
 // Snapshot returns a read-only copy of the Tree from the given root
