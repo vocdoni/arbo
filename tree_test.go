@@ -11,6 +11,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/vocdoni/arbo/memdb"
 	"github.com/vocdoni/davinci-node/db"
 	"github.com/vocdoni/davinci-node/db/pebbledb"
 )
@@ -47,6 +48,76 @@ func testDBTx(c *qt.C, database db.Database) {
 	v, err := wTx.Get([]byte("a"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(v, qt.DeepEquals, []byte("b"))
+}
+
+func TestNewTreeWithTxCanBeDiscardedWithoutInitializingTree(t *testing.T) {
+	c := qt.New(t)
+
+	database := memdb.New()
+	wTx := NewTreeWriteTx(database)
+	_, err := NewTreeWithTx(wTx, Config{
+		Database:     database,
+		MaxLevels:    256,
+		HashFunction: HashFunctionSha256,
+	})
+	c.Assert(err, qt.IsNil)
+	wTx.Discard()
+
+	rawRootKey := append(append([]byte(nil), dbTreePrefix...), dbKeyRoot...)
+	_, err = database.Get(rawRootKey)
+	c.Assert(err, qt.Equals, db.ErrKeyNotFound)
+}
+
+func TestTreeWriteTxUsesTreeNamespace(t *testing.T) {
+	c := qt.New(t)
+
+	database := memdb.New()
+	tree, err := NewTree(Config{
+		Database:     database,
+		MaxLevels:    256,
+		HashFunction: HashFunctionSha256,
+	})
+	c.Assert(err, qt.IsNil)
+
+	wTx := tree.WriteTx()
+	err = wTx.Set(dbKeyRoot, []byte("root-value"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(wTx.Commit(), qt.IsNil)
+	wTx.Discard()
+
+	_, err = database.Get(dbKeyRoot)
+	c.Assert(err, qt.Equals, db.ErrKeyNotFound)
+
+	rawRootKey := append(append([]byte(nil), dbTreePrefix...), dbKeyRoot...)
+	got, err := database.Get(rawRootKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.DeepEquals, []byte("root-value"))
+}
+
+func TestTreeWriteTxWorksWithTreeMethods(t *testing.T) {
+	c := qt.New(t)
+
+	database := memdb.New()
+	tree, err := NewTree(Config{
+		Database:     database,
+		MaxLevels:    256,
+		HashFunction: HashFunctionSha256,
+	})
+	c.Assert(err, qt.IsNil)
+
+	wTx := tree.WriteTx()
+	err = tree.AddWithTx(wTx, []byte{1}, []byte{2})
+	c.Assert(err, qt.IsNil)
+	c.Assert(wTx.Commit(), qt.IsNil)
+	wTx.Discard()
+
+	nLeafs, err := tree.GetNLeafs()
+	c.Assert(err, qt.IsNil)
+	c.Assert(nLeafs, qt.Equals, 1)
+
+	_, gotValue, err := tree.Get([]byte{1})
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotValue, qt.DeepEquals, []byte{2})
 }
 
 func TestAddTestVectors(t *testing.T) {
