@@ -1,6 +1,6 @@
 module testgnark
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/consensys/gnark v0.12.1-0.20250320152310-b51a3d4535cb
@@ -34,10 +34,10 @@ require (
 	github.com/vocdoni/vocdoni-z-sandbox v0.0.0-20241216104229-fa0b063e636c // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.vocdoni.io/dvote v1.10.2-0.20241024102542-c1ce6d744bc5 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20240823005443-9b4947da3948 // indirect
 	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.3.0 // indirect
 	rsc.io/tmplfunc v0.0.3 // indirect
